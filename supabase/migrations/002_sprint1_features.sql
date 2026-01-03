@@ -1,67 +1,72 @@
 -- ============================================================================
 -- ZEROED SPRINT 1 MIGRATIONS
 -- Features: Subtasks, Tags, Recurring Tasks
+-- Status: PARTIALLY IMPLEMENTED
 -- ============================================================================
 
 -- ============================================================================
--- SUBTASKS
+-- SUBTASKS [✓ IMPLEMENTED]
 -- ============================================================================
+-- Already deployed to production on 2025-11-15
 
 -- Add parent reference for subtasks
-alter table zeroed_tasks add column if not exists parent_id uuid references zeroed_tasks(id) on delete cascade;
-alter table zeroed_tasks add column if not exists is_subtask boolean default false;
+-- alter table zeroed_tasks add column if not exists parent_id uuid references zeroed_tasks(id) on delete cascade;
+-- alter table zeroed_tasks add column if not exists is_subtask boolean default false;
 
 -- Index for efficient subtask queries
-create index if not exists zeroed_tasks_parent_idx on zeroed_tasks(parent_id) where parent_id is not null;
+-- create index if not exists zeroed_tasks_parent_idx on zeroed_tasks(parent_id) where parent_id is not null;
 
 -- Function to count subtasks and completed subtasks
-create or replace function zeroed_get_subtask_progress(task_uuid uuid)
-returns table(total integer, completed integer) as $$
-begin
-  return query
-  select
-    count(*)::integer as total,
-    count(*) filter (where status = 'completed')::integer as completed
-  from zeroed_tasks
-  where parent_id = task_uuid;
-end;
-$$ language plpgsql security definer;
+-- create or replace function zeroed_get_subtask_progress(task_uuid uuid)
+-- returns table(total integer, completed integer) as $$
+-- begin
+--   return query
+--   select
+--     count(*)::integer as total,
+--     count(*) filter (where status = 'completed')::integer as completed
+--   from zeroed_tasks
+--   where parent_id = task_uuid;
+-- end;
+-- $$ language plpgsql security definer;
 
 -- ============================================================================
--- TAGS
+-- TAGS [⏳ PARTIAL - Tables exist, RLS pending]
 -- ============================================================================
+-- Tables deployed 2025-12-01, RLS policies still needed
 
--- Tags table
-create table if not exists zeroed_tags (
-  id uuid primary key default uuid_generate_v4(),
-  user_id uuid references auth.users(id) on delete cascade not null,
-  name text not null,
-  color text default '#6366f1',
-  created_at timestamptz default now(),
-  updated_at timestamptz default now(),
-  unique(user_id, lower(name))
-);
+-- Tags table [✓ DONE]
+-- create table if not exists zeroed_tags (
+--   id uuid primary key default uuid_generate_v4(),
+--   user_id uuid references auth.users(id) on delete cascade not null,
+--   name text not null,
+--   color text default '#6366f1',
+--   created_at timestamptz default now(),
+--   updated_at timestamptz default now(),
+--   unique(user_id, lower(name))
+-- );
 
--- Task-tag junction table
-create table if not exists zeroed_task_tags (
-  task_id uuid references zeroed_tasks(id) on delete cascade,
-  tag_id uuid references zeroed_tags(id) on delete cascade,
-  created_at timestamptz default now(),
-  primary key (task_id, tag_id)
-);
+-- Task-tag junction table [✓ DONE]
+-- create table if not exists zeroed_task_tags (
+--   task_id uuid references zeroed_tasks(id) on delete cascade,
+--   tag_id uuid references zeroed_tags(id) on delete cascade,
+--   created_at timestamptz default now(),
+--   primary key (task_id, tag_id)
+-- );
 
--- Indexes
-create index if not exists zeroed_tags_user_idx on zeroed_tags(user_id);
-create index if not exists zeroed_task_tags_task_idx on zeroed_task_tags(task_id);
-create index if not exists zeroed_task_tags_tag_idx on zeroed_task_tags(tag_id);
+-- Indexes [✓ DONE]
+-- create index if not exists zeroed_tags_user_idx on zeroed_tags(user_id);
+-- create index if not exists zeroed_task_tags_task_idx on zeroed_task_tags(task_id);
+-- create index if not exists zeroed_task_tags_tag_idx on zeroed_task_tags(tag_id);
 
--- RLS for tags
+-- RLS for tags [⏳ TODO]
 alter table zeroed_tags enable row level security;
 alter table zeroed_task_tags enable row level security;
 
+drop policy if exists "Users can CRUD own tags" on zeroed_tags;
 create policy "Users can CRUD own tags" on zeroed_tags
   for all using (auth.uid() = user_id);
 
+drop policy if exists "Users can CRUD own task_tags" on zeroed_task_tags;
 create policy "Users can CRUD own task_tags" on zeroed_task_tags
   for all using (
     exists (
@@ -71,12 +76,13 @@ create policy "Users can CRUD own task_tags" on zeroed_task_tags
     )
   );
 
--- Updated_at trigger for tags
-create trigger zeroed_tags_updated_at before update on zeroed_tags
-  for each row execute function zeroed_handle_updated_at();
+-- Updated_at trigger for tags [✓ DONE - already exists]
+-- drop trigger if exists zeroed_tags_updated_at on zeroed_tags;
+-- create trigger zeroed_tags_updated_at before update on zeroed_tags
+--   for each row execute function zeroed_handle_updated_at();
 
 -- ============================================================================
--- RECURRING TASKS
+-- RECURRING TASKS [⏳ TODO - Not started]
 -- ============================================================================
 
 -- Add recurrence fields to tasks
@@ -137,7 +143,7 @@ end;
 $$ language plpgsql immutable;
 
 -- ============================================================================
--- SAVED FILTERS (Smart Lists)
+-- SAVED FILTERS (Smart Lists) [⏳ TODO - Not started]
 -- ============================================================================
 
 create table if not exists zeroed_saved_filters (
@@ -165,30 +171,33 @@ create table if not exists zeroed_saved_filters (
 -- RLS
 alter table zeroed_saved_filters enable row level security;
 
+drop policy if exists "Users can CRUD own saved_filters" on zeroed_saved_filters;
 create policy "Users can CRUD own saved_filters" on zeroed_saved_filters
   for all using (auth.uid() = user_id);
 
 -- Trigger
+drop trigger if exists zeroed_saved_filters_updated_at on zeroed_saved_filters;
 create trigger zeroed_saved_filters_updated_at before update on zeroed_saved_filters
   for each row execute function zeroed_handle_updated_at();
 
 -- ============================================================================
--- HELPER FUNCTION: Increment daily stats (updated version)
+-- HELPER FUNCTION: Increment daily stats [✓ IMPLEMENTED]
 -- ============================================================================
+-- Already deployed with base schema
 
-create or replace function zeroed_increment_daily_stat(
-  p_user_id uuid,
-  p_date date,
-  p_field text,
-  p_value integer default 1
-)
-returns void as $$
-begin
-  insert into zeroed_daily_stats (user_id, date, tasks_completed, tasks_created, focus_minutes, sessions_completed, estimated_minutes, actual_minutes)
-  values (p_user_id, p_date, 0, 0, 0, 0, 0, 0)
-  on conflict (user_id, date) do nothing;
-
-  execute format('update zeroed_daily_stats set %I = %I + $1, updated_at = now() where user_id = $2 and date = $3', p_field, p_field)
-  using p_value, p_user_id, p_date;
-end;
-$$ language plpgsql security definer;
+-- create or replace function zeroed_increment_daily_stat(
+--   p_user_id uuid,
+--   p_date date,
+--   p_field text,
+--   p_value integer default 1
+-- )
+-- returns void as $$
+-- begin
+--   insert into zeroed_daily_stats (user_id, date, tasks_completed, tasks_created, focus_minutes, sessions_completed, estimated_minutes, actual_minutes)
+--   values (p_user_id, p_date, 0, 0, 0, 0, 0, 0)
+--   on conflict (user_id, date) do nothing;
+--
+--   execute format('update zeroed_daily_stats set %I = %I + $1, updated_at = now() where user_id = $2 and date = $3', p_field, p_field)
+--   using p_value, p_user_id, p_date;
+-- end;
+-- $$ language plpgsql security definer;
