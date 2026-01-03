@@ -14,6 +14,8 @@ import {
   Plus,
   X,
   Menu,
+  Trophy,
+  Repeat,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -32,6 +34,8 @@ const navigation = [
   { name: "Today", href: "/today", icon: LayoutDashboard },
   { name: "Lists", href: "/lists", icon: FolderOpen },
   { name: "Focus", href: "/focus", icon: Timer },
+  { name: "Goals", href: "/goals", icon: Target },
+  { name: "Habits", href: "/habits", icon: Repeat },
   { name: "Stats", href: "/stats", icon: BarChart3 },
 ];
 

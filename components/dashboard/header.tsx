@@ -10,11 +10,13 @@ import { CommandMenu } from "./command-menu";
 
 interface HeaderProps {
   title: string;
+  description?: string;
+  action?: React.ReactNode;
   showTimer?: boolean;
   onMenuClick?: () => void;
 }
 
-export function Header({ title, showTimer = true, onMenuClick }: HeaderProps) {
+export function Header({ title, description, action, showTimer = true, onMenuClick }: HeaderProps) {
   const { state, timeRemaining, task, pauseTimer, resumeTimer } =
     useTimerStore();
   const [mounted, setMounted] = useState(false);
@@ -40,7 +42,13 @@ export function Header({ title, showTimer = true, onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5" />
           </Button>
         )}
-        <h1 className="text-lg font-semibold">{title}</h1>
+        <div>
+          <h1 className="text-lg font-semibold">{title}</h1>
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+        {action && <div className="ml-4">{action}</div>}
       </div>
 
       <div className="flex items-center gap-4">

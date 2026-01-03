@@ -31,11 +31,13 @@ export async function updatePreferences(formData: FormData) {
 
   const { error } = await supabase
     .from("zeroed_user_preferences")
-    .upsert({
-      user_id: user.id,
-      ...updates,
-    })
-    .eq("user_id", user.id);
+    .upsert(
+      {
+        user_id: user.id,
+        ...updates,
+      },
+      { onConflict: "user_id" }
+    );
 
   if (error) {
     return { error: error.message };
