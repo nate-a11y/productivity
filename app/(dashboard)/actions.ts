@@ -773,6 +773,89 @@ export async function getSubtaskProgress(taskId: string) {
   return data[0] || { total: 0, completed: 0 };
 }
 
+// AI Task Breakdown - generates subtasks using Claude
+export async function breakdownTaskWithAI(taskId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized" };
+  }
+
+  // Get the task
+  const { data: task } = await supabase
+    .from("zeroed_tasks")
+    .select("id, title, notes, list_id, user_id")
+    .eq("id", taskId)
+    .single();
+
+  if (!task || task.user_id !== user.id) {
+    return { error: "Task not found" };
+  }
+
+  // Check if task already has subtasks
+  const { data: existingSubtasks } = await supabase
+    .from("zeroed_tasks")
+    .select("id")
+    .eq("parent_id", taskId);
+
+  if (existingSubtasks && existingSubtasks.length > 0) {
+    return { error: "Task already has subtasks. Delete them first to regenerate." };
+  }
+
+  try {
+    // Import dynamically to avoid issues if API key is missing
+    const { breakdownTask } = await import("@/lib/ai/breakdown-task");
+    const result = await breakdownTask(task.title, task.notes);
+
+    if (!result.subtasks || result.subtasks.length === 0) {
+      return { error: "Could not generate subtasks for this task" };
+    }
+
+    // Create all subtasks
+    const subtasksToInsert = result.subtasks.map((subtask, index) => ({
+      user_id: user.id,
+      list_id: task.list_id,
+      parent_id: taskId,
+      is_subtask: true,
+      title: subtask.title,
+      notes: subtask.notes || null,
+      estimated_minutes: subtask.estimated_minutes || 15,
+      position: index + 1,
+      status: "pending" as const,
+    }));
+
+    const { data: createdSubtasks, error: insertError } = await supabase
+      .from("zeroed_tasks")
+      .insert(subtasksToInsert)
+      .select();
+
+    if (insertError) {
+      return { error: insertError.message };
+    }
+
+    // Update parent task estimate if suggested
+    if (result.suggested_estimate) {
+      await supabase
+        .from("zeroed_tasks")
+        .update({ estimated_minutes: result.suggested_estimate })
+        .eq("id", taskId);
+    }
+
+    revalidatePath("/");
+    return {
+      success: true,
+      subtasksCreated: createdSubtasks?.length || 0,
+      subtasks: createdSubtasks || [],
+    };
+  } catch (error) {
+    console.error("AI breakdown error:", error);
+    return { error: "Failed to generate subtasks. Try again." };
+  }
+}
+
 // ============================================================================
 // TAG ACTIONS
 // ============================================================================

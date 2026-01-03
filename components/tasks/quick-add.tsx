@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { createQuickTask } from "@/app/(dashboard)/actions";
+import { VoiceInput } from "./voice-input";
 
 interface QuickAddProps {
   defaultListId: string;
@@ -40,9 +41,18 @@ export function QuickAdd({
     }
   }
 
+  const handleVoiceResult = useCallback((text: string) => {
+    setValue((prev) => (prev ? `${prev} ${text}` : text));
+    inputRef.current?.focus();
+  }, []);
+
+  const handleInterimResult = useCallback((text: string) => {
+    // Show interim results as placeholder
+  }, []);
+
   return (
     <form onSubmit={handleSubmit} className="flex gap-2">
-      <div className="relative flex-1">
+      <div className="relative flex-1 flex gap-1">
         <Input
           ref={inputRef}
           value={value}
@@ -52,10 +62,15 @@ export function QuickAdd({
           disabled={isSubmitting}
         />
         {isSubmitting && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+          <div className="absolute right-12 top-1/2 -translate-y-1/2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         )}
+        <VoiceInput
+          onResult={handleVoiceResult}
+          onInterimResult={handleInterimResult}
+          disabled={isSubmitting}
+        />
       </div>
       <Button type="submit" disabled={isSubmitting || !value.trim()}>
         <Plus className="h-4 w-4 mr-1" />

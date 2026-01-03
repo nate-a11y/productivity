@@ -16,6 +16,8 @@ import {
   ChevronRight,
   SkipForward,
   StopCircle,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -36,6 +38,7 @@ import {
   completeRecurringTask,
   skipRecurringOccurrence,
   stopRecurring,
+  breakdownTaskWithAI,
 } from "@/app/(dashboard)/actions";
 import { useTimerStore } from "@/lib/hooks/use-timer";
 import { playCompletionSound } from "@/lib/sounds";
@@ -59,6 +62,7 @@ interface TaskItemProps {
 export function TaskItem({ task, onEdit, onUpdate }: TaskItemProps) {
   const [isCompleting, setIsCompleting] = useState(false);
   const [showSubtasks, setShowSubtasks] = useState(false);
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
   const router = useRouter();
   const { startTimer, state: timerState } = useTimerStore();
 
@@ -118,6 +122,28 @@ export function TaskItem({ task, onEdit, onUpdate }: TaskItemProps) {
     }
     startTimer(task, task.estimated_minutes);
     router.push("/focus");
+  }
+
+  async function handleBreakdown() {
+    if (hasSubtasks) {
+      toast.error("Task already has subtasks");
+      return;
+    }
+    setIsBreakingDown(true);
+    try {
+      const result = await breakdownTaskWithAI(task.id);
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`Created ${result.subtasksCreated} subtasks`);
+        setShowSubtasks(true);
+        onUpdate?.();
+      }
+    } catch {
+      toast.error("Failed to break down task");
+    } finally {
+      setIsBreakingDown(false);
+    }
   }
 
   return (
@@ -204,6 +230,16 @@ export function TaskItem({ task, onEdit, onUpdate }: TaskItemProps) {
                     <Timer className="mr-2 h-4 w-4" />
                     Start Focus
                   </DropdownMenuItem>
+                  {!hasSubtasks && !isCompleted && (
+                    <DropdownMenuItem onClick={handleBreakdown} disabled={isBreakingDown}>
+                      {isBreakingDown ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-2 h-4 w-4" />
+                      )}
+                      Break this down
+                    </DropdownMenuItem>
+                  )}
                   {task.is_recurring && (
                     <>
                       <DropdownMenuSeparator />
