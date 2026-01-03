@@ -1,22 +1,18 @@
 -- ============================================================================
 -- ZEROED SPRINT 1 MIGRATIONS
 -- Features: Subtasks, Tags, Recurring Tasks
--- Status: PARTIALLY IMPLEMENTED
+-- Status: ✓ FULLY IMPLEMENTED
 -- ============================================================================
 
 -- ============================================================================
 -- SUBTASKS [✓ IMPLEMENTED]
 -- ============================================================================
--- Already deployed to production on 2025-11-15
+-- Deployed to production on 2025-11-15
 
--- Add parent reference for subtasks
 -- alter table zeroed_tasks add column if not exists parent_id uuid references zeroed_tasks(id) on delete cascade;
 -- alter table zeroed_tasks add column if not exists is_subtask boolean default false;
-
--- Index for efficient subtask queries
 -- create index if not exists zeroed_tasks_parent_idx on zeroed_tasks(parent_id) where parent_id is not null;
 
--- Function to count subtasks and completed subtasks
 -- create or replace function zeroed_get_subtask_progress(task_uuid uuid)
 -- returns table(total integer, completed integer) as $$
 -- begin
@@ -30,11 +26,10 @@
 -- $$ language plpgsql security definer;
 
 -- ============================================================================
--- TAGS [⏳ PARTIAL - Tables exist, RLS pending]
+-- TAGS [✓ IMPLEMENTED]
 -- ============================================================================
--- Tables deployed 2025-12-01, RLS policies still needed
+-- Tables deployed 2025-12-01, RLS policies deployed 2026-01-03
 
--- Tags table [✓ DONE]
 -- create table if not exists zeroed_tags (
 --   id uuid primary key default uuid_generate_v4(),
 --   user_id uuid references auth.users(id) on delete cascade not null,
@@ -45,7 +40,6 @@
 --   unique(user_id, lower(name))
 -- );
 
--- Task-tag junction table [✓ DONE]
 -- create table if not exists zeroed_task_tags (
 --   task_id uuid references zeroed_tasks(id) on delete cascade,
 --   tag_id uuid references zeroed_tags(id) on delete cascade,
@@ -53,41 +47,38 @@
 --   primary key (task_id, tag_id)
 -- );
 
--- Indexes [✓ DONE]
 -- create index if not exists zeroed_tags_user_idx on zeroed_tags(user_id);
 -- create index if not exists zeroed_task_tags_task_idx on zeroed_task_tags(task_id);
 -- create index if not exists zeroed_task_tags_tag_idx on zeroed_task_tags(tag_id);
 
--- RLS for tags [⏳ TODO]
-alter table zeroed_tags enable row level security;
-alter table zeroed_task_tags enable row level security;
+-- alter table zeroed_tags enable row level security;
+-- alter table zeroed_task_tags enable row level security;
 
-drop policy if exists "Users can CRUD own tags" on zeroed_tags;
-create policy "Users can CRUD own tags" on zeroed_tags
-  for all using (auth.uid() = user_id);
+-- drop policy if exists "Users can CRUD own tags" on zeroed_tags;
+-- create policy "Users can CRUD own tags" on zeroed_tags
+--   for all using (auth.uid() = user_id);
 
-drop policy if exists "Users can CRUD own task_tags" on zeroed_task_tags;
-create policy "Users can CRUD own task_tags" on zeroed_task_tags
-  for all using (
-    exists (
-      select 1 from zeroed_tasks
-      where zeroed_tasks.id = zeroed_task_tags.task_id
-      and zeroed_tasks.user_id = auth.uid()
-    )
-  );
+-- drop policy if exists "Users can CRUD own task_tags" on zeroed_task_tags;
+-- create policy "Users can CRUD own task_tags" on zeroed_task_tags
+--   for all using (
+--     exists (
+--       select 1 from zeroed_tasks
+--       where zeroed_tasks.id = zeroed_task_tags.task_id
+--       and zeroed_tasks.user_id = auth.uid()
+--     )
+--   );
 
--- Updated_at trigger for tags [✓ DONE - already exists]
 -- drop trigger if exists zeroed_tags_updated_at on zeroed_tags;
 -- create trigger zeroed_tags_updated_at before update on zeroed_tags
 --   for each row execute function zeroed_handle_updated_at();
 
 -- ============================================================================
--- RECURRING TASKS [⏳ TODO - Not started]
+-- RECURRING TASKS [✓ IMPLEMENTED]
 -- ============================================================================
+-- Deployed 2026-01-03
 
--- Add recurrence fields to tasks
-alter table zeroed_tasks add column if not exists is_recurring boolean default false;
-alter table zeroed_tasks add column if not exists recurrence_rule jsonb;
+-- alter table zeroed_tasks add column if not exists is_recurring boolean default false;
+-- alter table zeroed_tasks add column if not exists recurrence_rule jsonb;
 -- recurrence_rule format:
 -- {
 --   "frequency": "daily" | "weekly" | "monthly" | "yearly",
@@ -98,92 +89,89 @@ alter table zeroed_tasks add column if not exists recurrence_rule jsonb;
 --   "endAfter": 10           -- optional: end after X occurrences
 -- }
 
-alter table zeroed_tasks add column if not exists recurrence_parent_id uuid references zeroed_tasks(id) on delete set null;
-alter table zeroed_tasks add column if not exists recurrence_index integer default 0;
+-- alter table zeroed_tasks add column if not exists recurrence_parent_id uuid references zeroed_tasks(id) on delete set null;
+-- alter table zeroed_tasks add column if not exists recurrence_index integer default 0;
 
--- Index for finding recurrence instances
-create index if not exists zeroed_tasks_recurrence_parent_idx on zeroed_tasks(recurrence_parent_id) where recurrence_parent_id is not null;
+-- create index if not exists zeroed_tasks_recurrence_parent_idx on zeroed_tasks(recurrence_parent_id) where recurrence_parent_id is not null;
 
--- Function to generate next occurrence date
-create or replace function zeroed_next_occurrence(
-  p_rule jsonb,
-  p_current_date date
-)
-returns date as $$
-declare
-  v_frequency text;
-  v_interval integer;
-  v_next_date date;
-  v_end_date date;
-begin
-  v_frequency := p_rule->>'frequency';
-  v_interval := coalesce((p_rule->>'interval')::integer, 1);
-  v_end_date := (p_rule->>'endDate')::date;
-
-  case v_frequency
-    when 'daily' then
-      v_next_date := p_current_date + (v_interval || ' days')::interval;
-    when 'weekly' then
-      v_next_date := p_current_date + (v_interval * 7 || ' days')::interval;
-    when 'monthly' then
-      v_next_date := p_current_date + (v_interval || ' months')::interval;
-    when 'yearly' then
-      v_next_date := p_current_date + (v_interval || ' years')::interval;
-    else
-      v_next_date := null;
-  end case;
-
-  -- Check if past end date
-  if v_end_date is not null and v_next_date > v_end_date then
-    return null;
-  end if;
-
-  return v_next_date;
-end;
-$$ language plpgsql immutable;
+-- create or replace function zeroed_next_occurrence(
+--   p_rule jsonb,
+--   p_current_date date
+-- )
+-- returns date as $$
+-- declare
+--   v_frequency text;
+--   v_interval integer;
+--   v_next_date date;
+--   v_end_date date;
+-- begin
+--   v_frequency := p_rule->>'frequency';
+--   v_interval := coalesce((p_rule->>'interval')::integer, 1);
+--   v_end_date := (p_rule->>'endDate')::date;
+--
+--   case v_frequency
+--     when 'daily' then
+--       v_next_date := p_current_date + (v_interval || ' days')::interval;
+--     when 'weekly' then
+--       v_next_date := p_current_date + (v_interval * 7 || ' days')::interval;
+--     when 'monthly' then
+--       v_next_date := p_current_date + (v_interval || ' months')::interval;
+--     when 'yearly' then
+--       v_next_date := p_current_date + (v_interval || ' years')::interval;
+--     else
+--       v_next_date := null;
+--   end case;
+--
+--   -- Check if past end date
+--   if v_end_date is not null and v_next_date > v_end_date then
+--     return null;
+--   end if;
+--
+--   return v_next_date;
+-- end;
+-- $$ language plpgsql immutable;
 
 -- ============================================================================
--- SAVED FILTERS (Smart Lists) [⏳ TODO - Not started]
+-- SAVED FILTERS (Smart Lists) [✓ IMPLEMENTED]
 -- ============================================================================
+-- Deployed 2026-01-03
 
-create table if not exists zeroed_saved_filters (
-  id uuid primary key default uuid_generate_v4(),
-  user_id uuid references auth.users(id) on delete cascade not null,
-  name text not null,
-  icon text default 'filter',
-  color text default '#6366f1',
-  filter_config jsonb not null,
-  -- filter_config format:
-  -- {
-  --   "lists": ["uuid1", "uuid2"],     -- filter by lists (empty = all)
-  --   "tags": ["uuid1", "uuid2"],      -- filter by tags (AND logic)
-  --   "status": ["pending", "in_progress"],
-  --   "priority": ["high", "urgent"],
-  --   "dueDateRange": "today" | "week" | "overdue" | "no_date",
-  --   "isRecurring": true | false | null,
-  --   "hasSubtasks": true | false | null
-  -- }
-  position integer default 0,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
+-- create table if not exists zeroed_saved_filters (
+--   id uuid primary key default uuid_generate_v4(),
+--   user_id uuid references auth.users(id) on delete cascade not null,
+--   name text not null,
+--   icon text default 'filter',
+--   color text default '#6366f1',
+--   filter_config jsonb not null,
+--   -- filter_config format:
+--   -- {
+--   --   "lists": ["uuid1", "uuid2"],     -- filter by lists (empty = all)
+--   --   "tags": ["uuid1", "uuid2"],      -- filter by tags (AND logic)
+--   --   "status": ["pending", "in_progress"],
+--   --   "priority": ["high", "urgent"],
+--   --   "dueDateRange": "today" | "week" | "overdue" | "no_date",
+--   --   "isRecurring": true | false | null,
+--   --   "hasSubtasks": true | false | null
+--   -- }
+--   position integer default 0,
+--   created_at timestamptz default now(),
+--   updated_at timestamptz default now()
+-- );
 
--- RLS
-alter table zeroed_saved_filters enable row level security;
+-- alter table zeroed_saved_filters enable row level security;
 
-drop policy if exists "Users can CRUD own saved_filters" on zeroed_saved_filters;
-create policy "Users can CRUD own saved_filters" on zeroed_saved_filters
-  for all using (auth.uid() = user_id);
+-- drop policy if exists "Users can CRUD own saved_filters" on zeroed_saved_filters;
+-- create policy "Users can CRUD own saved_filters" on zeroed_saved_filters
+--   for all using (auth.uid() = user_id);
 
--- Trigger
-drop trigger if exists zeroed_saved_filters_updated_at on zeroed_saved_filters;
-create trigger zeroed_saved_filters_updated_at before update on zeroed_saved_filters
-  for each row execute function zeroed_handle_updated_at();
+-- drop trigger if exists zeroed_saved_filters_updated_at on zeroed_saved_filters;
+-- create trigger zeroed_saved_filters_updated_at before update on zeroed_saved_filters
+--   for each row execute function zeroed_handle_updated_at();
 
 -- ============================================================================
 -- HELPER FUNCTION: Increment daily stats [✓ IMPLEMENTED]
 -- ============================================================================
--- Already deployed with base schema
+-- Deployed with base schema
 
 -- create or replace function zeroed_increment_daily_stat(
 --   p_user_id uuid,
