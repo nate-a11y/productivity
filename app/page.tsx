@@ -134,9 +134,17 @@ export default function LandingPage() {
       <footer className="border-t border-border py-8 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <Logo size="sm" />
-          <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Bruh. All rights reserved.
-          </p>
+          <div className="flex items-center gap-6">
+            <Link href="/privacy" className="text-xs text-muted-foreground hover:text-foreground">
+              Privacy
+            </Link>
+            <Link href="/terms" className="text-xs text-muted-foreground hover:text-foreground">
+              Terms
+            </Link>
+            <p className="text-xs text-muted-foreground">
+              &copy; {new Date().getFullYear()} Bruh
+            </p>
+          </div>
         </div>
       </footer>
     </div>
