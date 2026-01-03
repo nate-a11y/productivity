@@ -12,6 +12,7 @@ import { executeFilter } from "@/lib/filters/engine";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "@/lib/integrations/calendar-sync";
 import { syncTaskToNotion, completeTaskInNotion, uncompleteTaskInNotion, archiveTaskInNotion } from "@/lib/integrations/notion-sync";
 import { notifyTaskCreated, notifyTaskCompleted } from "@/lib/integrations/slack-notifications";
+import { parseNaturalLanguageTask } from "@/lib/utils/natural-language-parser";
 
 type TaskPriority = "low" | "normal" | "high" | "urgent";
 type GoalTargetType = "tasks_completed" | "focus_minutes" | "focus_sessions" | "streak_days" | "custom";
@@ -159,6 +160,8 @@ export async function createQuickTask(title: string, listId: string) {
     return { error: "Unauthorized" };
   }
 
+  // Parse natural language input
+  const parsed = parseNaturalLanguageTask(title);
   const today = format(new Date(), "yyyy-MM-dd");
 
   // Get max position for this list
@@ -173,10 +176,11 @@ export async function createQuickTask(title: string, listId: string) {
   const { data: task, error } = await supabase.from("zeroed_tasks").insert({
     user_id: user.id,
     list_id: listId,
-    title,
-    estimated_minutes: 25,
-    priority: "normal",
-    due_date: today,
+    title: parsed.title || title,
+    estimated_minutes: parsed.estimatedMinutes || 25,
+    priority: (parsed.priority || "normal") as TaskPriority,
+    due_date: parsed.dueDate || today,
+    due_time: parsed.dueTime || null,
     position: (maxPosition?.position || 0) + 1,
   }).select().single();
 
@@ -2468,4 +2472,26 @@ export async function processBrainDump(text: string, listId: string) {
     console.error("Brain dump processing failed:", error);
     return { error: "Failed to process brain dump. Try again." };
   }
+}
+
+// ============================================================================
+// ONBOARDING: UPDATE DISPLAY NAME
+// ============================================================================
+
+export async function updateDisplayName(name: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_user_preferences")
+    .upsert({
+      user_id: user.id,
+      display_name: name.trim(),
+    }, { onConflict: "user_id" });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
 }
