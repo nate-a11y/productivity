@@ -74,9 +74,10 @@ create policy "Users can CRUD own task_tags" on zeroed_task_tags
     )
   );
 
--- Updated_at trigger for tags [⏳ TODO]
-create trigger zeroed_tags_updated_at before update on zeroed_tags
-  for each row execute function zeroed_handle_updated_at();
+-- Updated_at trigger for tags [✓ DONE - already exists]
+-- drop trigger if exists zeroed_tags_updated_at on zeroed_tags;
+-- create trigger zeroed_tags_updated_at before update on zeroed_tags
+--   for each row execute function zeroed_handle_updated_at();
 
 -- ============================================================================
 -- RECURRING TASKS [⏳ TODO - Not started]
