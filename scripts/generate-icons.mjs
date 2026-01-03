@@ -12,12 +12,10 @@ const svgContent = `<svg width="512" height="512" viewBox="0 0 512 512" fill="no
   <text x="256" y="340" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="320" font-weight="700" fill="#0a0a0a" text-anchor="middle">B</text>
 </svg>`;
 
-// For PNG generation, we need to use a simpler SVG that sharp can render
-// Sharp has limited text support, so we'll create a simpler version
-// B is optically centered (shifted right to account for asymmetric shape)
+// For PNG generation - smaller B with generous padding to match reference
 const simpleSvg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="96" fill="#ff6b00"/>
-  <path fill="#0a0a0a" transform="translate(166, 128)" d="M0 0h100c28 0 50 8 67 24s25 37 25 64c0 20-6 37-17 50s-26 22-46 27v1c24 4 42 13 55 28s19 36 19 60c0 30-10 54-30 72s-48 26-84 26H0V0zm48 144h44c19 0 34-4 43-13s14-21 14-36c0-16-5-28-14-36s-23-12-42-12H48v97zm0 147h52c22 0 38-5 49-15s16-24 16-42c0-18-6-32-17-41s-29-14-52-14H48v112z"/>
+  <path fill="#0a0a0a" transform="translate(196, 176) scale(0.55)" d="M0 0h120c32 0 58 9 78 28s30 43 30 74c0 23-7 43-20 58s-30 26-53 31v2c28 4 49 15 64 32s22 42 22 70c0 35-12 63-35 84s-56 31-98 31H0V0zm56 168h51c22 0 39-5 50-15s17-24 17-42-6-32-16-41-26-14-48-14H56v112zm0 172h60c25 0 44-6 57-18s19-28 19-49c0-21-7-37-20-48s-33-17-60-17H56v132z"/>
 </svg>`;
 
 async function generateIcons() {
