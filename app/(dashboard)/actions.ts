@@ -3,9 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { format } from "date-fns";
-import type { RecurrenceRule } from "@/lib/supabase/types";
+import type {
+  RecurrenceRule,
+  Insertable,
+} from "@/lib/supabase/types";
 
 type TaskPriority = "low" | "normal" | "high" | "urgent";
+type GoalTargetType = "tasks_completed" | "focus_minutes" | "focus_sessions" | "streak_days" | "custom";
+type GoalPeriod = "daily" | "weekly" | "monthly" | "yearly" | "total";
+type HabitFrequency = "daily" | "weekdays" | "weekends" | "custom";
 
 // Helper to increment daily stats via RPC
 async function incrementDailyStat(
@@ -1057,6 +1063,844 @@ export async function stopRecurring(taskId: string) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ============================================================================
+// SPRINT 2: VIEW PREFERENCE ACTIONS
+// ============================================================================
+
+export async function getViewPreferences(listId?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("zeroed_view_preferences")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("list_id", listId || "global")
+    .single();
+
+  return data;
+}
+
+export async function updateViewPreferences(
+  listId: string | null,
+  updates: Record<string, unknown>
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Use type assertion for tables not in our schema types
+  const { error } = await (supabase as unknown as { from: (table: string) => { upsert: (data: Record<string, unknown>, options?: { onConflict?: string }) => Promise<{ error: { message: string } | null }> } })
+    .from("zeroed_view_preferences")
+    .upsert({
+      user_id: user.id,
+      list_id: listId || "global",
+      ...updates,
+    }, { onConflict: "user_id,list_id" });
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function updateTaskPosition(
+  taskId: string,
+  newPosition: number,
+  newStatus?: string,
+  newListId?: string
+) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const updates: Record<string, unknown> = { position: newPosition };
+  if (newStatus) updates.status = newStatus;
+  if (newListId) updates.list_id = newListId;
+
+  const { error } = await supabase
+    .from("zeroed_tasks")
+    .update(updates)
+    .eq("id", taskId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ============================================================================
+// SPRINT 3: GOAL ACTIONS
+// ============================================================================
+
+export async function createGoal(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const goalData: Insertable<"zeroed_goals"> = {
+    user_id: user.id,
+    title: formData.get("title") as string,
+    description: formData.get("description") as string || null,
+    target_type: formData.get("targetType") as GoalTargetType,
+    target_value: parseInt(formData.get("targetValue") as string),
+    period: formData.get("period") as GoalPeriod,
+    start_date: formData.get("startDate") as string || format(new Date(), "yyyy-MM-dd"),
+    end_date: formData.get("endDate") as string || null,
+    color: formData.get("color") as string || "#6366f1",
+    icon: formData.get("icon") as string || "target",
+  };
+  const { data, error } = await supabase.from("zeroed_goals").insert(goalData).select().single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/goals");
+  return { success: true, goal: data };
+}
+
+export async function updateGoal(goalId: string, updates: Record<string, unknown>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_goals")
+    .update(updates)
+    .eq("id", goalId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/goals");
+  return { success: true };
+}
+
+export async function deleteGoal(goalId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_goals")
+    .delete()
+    .eq("id", goalId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/goals");
+  return { success: true };
+}
+
+export async function getGoals() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_goals")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false });
+
+  return data || [];
+}
+
+// ============================================================================
+// SPRINT 3: HABIT ACTIONS
+// ============================================================================
+
+export async function createHabit(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: maxPos } = await supabase
+    .from("zeroed_habits")
+    .select("position")
+    .eq("user_id", user.id)
+    .order("position", { ascending: false })
+    .limit(1)
+    .single();
+
+  const frequencyDays = formData.getAll("frequencyDays").map(d => parseInt(d as string));
+
+  const habitData: Insertable<"zeroed_habits"> = {
+    user_id: user.id,
+    name: formData.get("name") as string,
+    description: formData.get("description") as string || null,
+    icon: formData.get("icon") as string || "💪",
+    color: formData.get("color") as string || "#6366f1",
+    frequency: (formData.get("frequency") as HabitFrequency) || "daily",
+    frequency_days: frequencyDays.length > 0 ? frequencyDays : [0, 1, 2, 3, 4, 5, 6],
+    target_per_day: parseInt(formData.get("targetPerDay") as string) || 1,
+    reminder_time: formData.get("reminderTime") as string || null,
+    position: (maxPos?.position || 0) + 1,
+  };
+  const { data, error } = await supabase.from("zeroed_habits").insert(habitData).select().single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/habits");
+  return { success: true, habit: data };
+}
+
+export async function updateHabit(habitId: string, updates: Record<string, unknown>) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_habits")
+    .update(updates)
+    .eq("id", habitId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/habits");
+  return { success: true };
+}
+
+export async function deleteHabit(habitId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_habits")
+    .delete()
+    .eq("id", habitId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/habits");
+  return { success: true };
+}
+
+export async function logHabitCompletion(habitId: string, count: number = 1, notes?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  // Check if log exists for today
+  const { data: existing } = await supabase
+    .from("zeroed_habit_logs")
+    .select("*")
+    .eq("habit_id", habitId)
+    .eq("date", today)
+    .single();
+
+  if (existing) {
+    // Update existing
+    const { error } = await supabase
+      .from("zeroed_habit_logs")
+      .update({ completed_count: existing.completed_count + count, notes })
+      .eq("id", existing.id);
+    if (error) return { error: error.message };
+  } else {
+    // Create new log
+    const { error } = await supabase.from("zeroed_habit_logs").insert({
+      habit_id: habitId,
+      user_id: user.id,
+      date: today,
+      completed_count: count,
+      notes,
+    });
+    if (error) return { error: error.message };
+  }
+
+  // Update habit streak
+  const { data: habit } = await supabase
+    .from("zeroed_habits")
+    .select("streak_current, streak_best, total_completions")
+    .eq("id", habitId)
+    .single();
+
+  if (habit) {
+    const newTotal = habit.total_completions + count;
+    const newStreak = habit.streak_current + 1;
+    const newBest = Math.max(habit.streak_best, newStreak);
+
+    await supabase
+      .from("zeroed_habits")
+      .update({
+        total_completions: newTotal,
+        streak_current: newStreak,
+        streak_best: newBest,
+      })
+      .eq("id", habitId);
+  }
+
+  revalidatePath("/habits");
+  return { success: true };
+}
+
+export async function getHabits() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_habits")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("is_archived", false)
+    .order("position");
+
+  return data || [];
+}
+
+export async function getHabitLogs(habitId: string, startDate: string, endDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_habit_logs")
+    .select("*")
+    .eq("habit_id", habitId)
+    .eq("user_id", user.id)
+    .gte("date", startDate)
+    .lte("date", endDate)
+    .order("date");
+
+  return data || [];
+}
+
+// ============================================================================
+// SPRINT 3: GAMIFICATION ACTIONS
+// ============================================================================
+
+export async function awardPoints(points: number, reason: string, referenceId?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Log points
+  await supabase.from("zeroed_points_history").insert({
+    user_id: user.id,
+    points,
+    reason,
+    reference_id: referenceId || null,
+  });
+
+  // Update total points in user preferences
+  const { data: prefs } = await supabase
+    .from("zeroed_user_preferences")
+    .select("total_points, level")
+    .eq("user_id", user.id)
+    .single();
+
+  const newTotal = (prefs?.total_points || 0) + points;
+
+  await supabase
+    .from("zeroed_user_preferences")
+    .update({ total_points: newTotal })
+    .eq("user_id", user.id);
+
+  revalidatePath("/");
+  return { success: true, newTotal };
+}
+
+export async function checkAndAwardAchievement(achievementType: string, value: number) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { earned: [] };
+
+  // Get already earned achievements
+  const { data: earned } = await supabase
+    .from("zeroed_achievements")
+    .select("achievement_tier")
+    .eq("user_id", user.id)
+    .eq("achievement_type", achievementType);
+
+  const earnedTiers = new Set(earned?.map(e => e.achievement_tier) || []);
+  const newAchievements: number[] = [];
+
+  // Check which tiers are newly earned
+  // This is a simplified version - in production you'd check against ACHIEVEMENTS constant
+  const tiers = [1, 5, 10, 25, 50, 100]; // Example tiers
+  for (const tier of tiers) {
+    if (value >= tier && !earnedTiers.has(tier)) {
+      await supabase.from("zeroed_achievements").insert({
+        user_id: user.id,
+        achievement_type: achievementType,
+        achievement_tier: tier,
+      });
+      newAchievements.push(tier);
+    }
+  }
+
+  return { earned: newAchievements };
+}
+
+export async function getAchievements() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_achievements")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("earned_at", { ascending: false });
+
+  return data || [];
+}
+
+export async function getPointsHistory(limit: number = 50) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_points_history")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  return data || [];
+}
+
+// ============================================================================
+// SPRINT 5: TEMPLATE ACTIONS
+// ============================================================================
+
+export async function createTaskFromTemplate(templateId: string, listId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: template } = await supabase
+    .from("zeroed_task_templates")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (!template) return { error: "Template not found" };
+
+  const taskData = template.task_data as { title: string; notes?: string; priority?: string; estimated_minutes?: number } | null;
+  if (!taskData) return { error: "Invalid template data" };
+
+  // Get max position
+  const { data: maxPos } = await supabase
+    .from("zeroed_tasks")
+    .select("position")
+    .eq("list_id", listId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .single();
+
+  const { data: task, error } = await supabase
+    .from("zeroed_tasks")
+    .insert({
+      user_id: user.id,
+      list_id: listId,
+      title: taskData.title,
+      notes: taskData.notes || null,
+      priority: (taskData.priority as TaskPriority) || "normal",
+      estimated_minutes: taskData.estimated_minutes || 25,
+      position: (maxPos?.position || 0) + 1,
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  // Create subtasks if any
+  const subtasksData = template.subtasks as Array<{ title: string; estimated_minutes: number }> | null;
+  if (subtasksData && subtasksData.length > 0) {
+    const subtasks = subtasksData.map((st, i) => ({
+      user_id: user.id,
+      list_id: listId,
+      parent_id: task.id,
+      is_subtask: true,
+      title: st.title,
+      estimated_minutes: st.estimated_minutes || 15,
+      position: i,
+    }));
+    await supabase.from("zeroed_tasks").insert(subtasks);
+  }
+
+  // Update use count
+  await supabase
+    .from("zeroed_task_templates")
+    .update({ use_count: template.use_count + 1 })
+    .eq("id", templateId);
+
+  revalidatePath("/");
+  return { success: true, task };
+}
+
+export async function saveTaskAsTemplate(taskId: string, name: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: task } = await supabase
+    .from("zeroed_tasks")
+    .select("*")
+    .eq("id", taskId)
+    .eq("user_id", user.id)
+    .single();
+
+  if (!task) return { error: "Task not found" };
+
+  // Get subtasks
+  const { data: subtasks } = await supabase
+    .from("zeroed_tasks")
+    .select("title, estimated_minutes")
+    .eq("parent_id", taskId)
+    .eq("is_subtask", true);
+
+  const { data: template, error } = await supabase
+    .from("zeroed_task_templates")
+    .insert({
+      user_id: user.id,
+      name,
+      task_data: {
+        title: task.title,
+        notes: task.notes,
+        priority: task.priority,
+        estimated_minutes: task.estimated_minutes,
+      },
+      subtasks: subtasks || null,
+    })
+    .select()
+    .single();
+
+  if (error) return { error: error.message };
+
+  return { success: true, template };
+}
+
+export async function createProjectFromTemplate(templateId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { data: template } = await supabase
+    .from("zeroed_project_templates")
+    .select("*")
+    .eq("id", templateId)
+    .single();
+
+  if (!template) return { error: "Template not found" };
+
+  const listData = template.list_data as { name: string; color?: string } | null;
+  const tasksData = template.tasks as Array<{ title: string; estimated_minutes?: number; priority?: string }> | null;
+
+  if (!listData) return { error: "Invalid template list data" };
+
+  // Get max position for lists
+  const { data: maxListPos } = await supabase
+    .from("zeroed_lists")
+    .select("position")
+    .eq("user_id", user.id)
+    .order("position", { ascending: false })
+    .limit(1)
+    .single();
+
+  // Create list
+  const { data: list, error: listError } = await supabase
+    .from("zeroed_lists")
+    .insert({
+      user_id: user.id,
+      name: listData.name,
+      color: listData.color || "#6366f1",
+      position: (maxListPos?.position || 0) + 1,
+    })
+    .select()
+    .single();
+
+  if (listError) return { error: listError.message };
+
+  // Create tasks
+  if (tasksData && tasksData.length > 0) {
+    for (let i = 0; i < tasksData.length; i++) {
+      const t = tasksData[i];
+      await supabase.from("zeroed_tasks").insert({
+        user_id: user.id,
+        list_id: list.id,
+        title: t.title,
+        estimated_minutes: t.estimated_minutes || 25,
+        priority: (t.priority as TaskPriority) || "normal",
+        position: i,
+      });
+    }
+  }
+
+  // Update use count
+  await supabase
+    .from("zeroed_project_templates")
+    .update({ use_count: template.use_count + 1 })
+    .eq("id", templateId);
+
+  revalidatePath("/lists");
+  return { success: true, list };
+}
+
+export async function getTaskTemplates() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_task_templates")
+    .select("*")
+    .or(`user_id.eq.${user.id},is_public.eq.true`)
+    .order("use_count", { ascending: false });
+
+  return data || [];
+}
+
+export async function getProjectTemplates(category?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  let query = supabase
+    .from("zeroed_project_templates")
+    .select("*")
+    .or(`user_id.eq.${user?.id || "00000000-0000-0000-0000-000000000000"},is_public.eq.true`);
+
+  if (category) {
+    query = query.eq("category", category);
+  }
+
+  const { data } = await query.order("use_count", { ascending: false });
+
+  return data || [];
+}
+
+// ============================================================================
+// SPRINT 6: ANALYTICS ACTIONS
+// ============================================================================
+
+export async function getProductivityMetrics(startDate: string, endDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  // Get current period stats
+  const { data: currentStats } = await supabase
+    .from("zeroed_daily_stats")
+    .select("*")
+    .eq("user_id", user.id)
+    .gte("date", startDate)
+    .lte("date", endDate);
+
+  // Calculate metrics
+  const tasksCompleted = currentStats?.reduce((s, d) => s + (d.tasks_completed || 0), 0) || 0;
+  const tasksCreated = currentStats?.reduce((s, d) => s + (d.tasks_created || 0), 0) || 0;
+  const focusMinutes = currentStats?.reduce((s, d) => s + (d.focus_minutes || 0), 0) || 0;
+  const sessionsCompleted = currentStats?.reduce((s, d) => s + (d.sessions_completed || 0), 0) || 0;
+
+  // Get user preferences for streak
+  const { data: prefs } = await supabase
+    .from("zeroed_user_preferences")
+    .select("streak_current, streak_best")
+    .eq("user_id", user.id)
+    .single();
+
+  return {
+    tasksCompleted,
+    tasksCreated,
+    completionRate: tasksCreated > 0 ? tasksCompleted / tasksCreated : 0,
+    focusMinutes,
+    sessionsCompleted,
+    avgTaskDuration: tasksCompleted > 0 ? focusMinutes / tasksCompleted : 0,
+    estimationAccuracy: 0, // Would need actual vs estimated comparison
+    currentStreak: prefs?.streak_current || 0,
+    longestStreak: prefs?.streak_best || 0,
+    tasksCompletedTrend: 0,
+    focusMinutesTrend: 0,
+  };
+}
+
+export async function getDailyBreakdown(startDate: string, endDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_daily_stats")
+    .select("date, tasks_completed, focus_minutes, sessions_completed")
+    .eq("user_id", user.id)
+    .gte("date", startDate)
+    .lte("date", endDate)
+    .order("date");
+
+  return data?.map(d => ({
+    date: d.date,
+    tasksCompleted: d.tasks_completed || 0,
+    focusMinutes: d.focus_minutes || 0,
+    sessionsCompleted: d.sessions_completed || 0,
+  })) || [];
+}
+
+// ============================================================================
+// SPRINT 6: TIME TRACKING ACTIONS
+// ============================================================================
+
+export async function createTimeEntry(formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const startTime = formData.get("startTime") as string;
+  const endTime = formData.get("endTime") as string | null;
+  const durationMinutes = formData.get("durationMinutes") as string;
+
+  const { data, error } = await supabase.from("zeroed_time_entries").insert({
+    user_id: user.id,
+    task_id: formData.get("taskId") as string || null,
+    description: formData.get("description") as string || null,
+    start_time: startTime,
+    end_time: endTime || null,
+    duration_minutes: parseInt(durationMinutes) || 0,
+    is_manual: true,
+  }).select().single();
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/time");
+  return { success: true, entry: data };
+}
+
+export async function getTimeEntries(startDate: string, endDate: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data } = await supabase
+    .from("zeroed_time_entries")
+    .select("*, zeroed_tasks(title)")
+    .eq("user_id", user.id)
+    .gte("start_time", startDate)
+    .lte("start_time", endDate)
+    .order("start_time", { ascending: false });
+
+  return data || [];
+}
+
+export async function deleteTimeEntry(entryId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const { error } = await supabase
+    .from("zeroed_time_entries")
+    .delete()
+    .eq("id", entryId)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/time");
+  return { success: true };
+}
+
+// ============================================================================
+// SPRINT 6: DATA EXPORT/DELETE ACTIONS
+// ============================================================================
+
+export async function exportAllData() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  const [tasks, lists, tags, goals, habits, focusSessions, dailyStats] = await Promise.all([
+    supabase.from("zeroed_tasks").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_lists").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_tags").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_goals").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_habits").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_focus_sessions").select("*").eq("user_id", user.id),
+    supabase.from("zeroed_daily_stats").select("*").eq("user_id", user.id),
+  ]);
+
+  return {
+    data: {
+      exportedAt: new Date().toISOString(),
+      tasks: tasks.data || [],
+      lists: lists.data || [],
+      tags: tags.data || [],
+      goals: goals.data || [],
+      habits: habits.data || [],
+      focusSessions: focusSessions.data || [],
+      dailyStats: dailyStats.data || [],
+    },
+  };
+}
+
+export async function deleteAllData() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Delete in order to respect foreign keys
+  await supabase.from("zeroed_task_tags").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_tasks").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_lists").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_tags").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_goals").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_habit_logs").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_habits").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_focus_sessions").delete().eq("user_id", user.id);
+  await supabase.from("zeroed_daily_stats").delete().eq("user_id", user.id);
+
+  revalidatePath("/");
+  return { success: true };
+}
+
+// ============================================================================
+// SPRINT 6: ONBOARDING ACTIONS
+// ============================================================================
+
+export async function completeOnboarding(preferences: Record<string, unknown>, firstTask?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Unauthorized" };
+
+  // Update preferences
+  await supabase
+    .from("zeroed_user_preferences")
+    .update({
+      ...preferences,
+      onboarding_completed: true,
+    })
+    .eq("user_id", user.id);
+
+  // Create first task if provided
+  if (firstTask) {
+    const { data: inbox } = await supabase
+      .from("zeroed_lists")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("name", "Inbox")
+      .single();
+
+    if (inbox) {
+      await supabase.from("zeroed_tasks").insert({
+        user_id: user.id,
+        list_id: inbox.id,
+        title: firstTask,
+        due_date: format(new Date(), "yyyy-MM-dd"),
+      });
+    }
   }
 
   revalidatePath("/");

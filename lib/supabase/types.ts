@@ -214,6 +214,11 @@ export type Database = {
           sessions_before_long_break: number;
           sound_enabled: boolean;
           notifications_enabled: boolean;
+          total_points: number;
+          level: number;
+          streak_current: number;
+          streak_best: number;
+          onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -227,6 +232,11 @@ export type Database = {
           sessions_before_long_break?: number;
           sound_enabled?: boolean;
           notifications_enabled?: boolean;
+          total_points?: number;
+          level?: number;
+          streak_current?: number;
+          streak_best?: number;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -240,6 +250,11 @@ export type Database = {
           sessions_before_long_break?: number;
           sound_enabled?: boolean;
           notifications_enabled?: boolean;
+          total_points?: number;
+          level?: number;
+          streak_current?: number;
+          streak_best?: number;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -383,6 +398,480 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Sprint 2: View Preferences
+      zeroed_view_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          list_id: string | null;
+          view_type: "list" | "kanban" | "calendar" | "table";
+          kanban_group_by: "status" | "priority" | "list";
+          calendar_color_by: "list" | "priority";
+          table_columns: string[];
+          table_sort_column: string;
+          table_sort_direction: "asc" | "desc";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          list_id?: string | null;
+          view_type?: "list" | "kanban" | "calendar" | "table";
+          kanban_group_by?: "status" | "priority" | "list";
+          calendar_color_by?: "list" | "priority";
+          table_columns?: string[];
+          table_sort_column?: string;
+          table_sort_direction?: "asc" | "desc";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          list_id?: string | null;
+          view_type?: "list" | "kanban" | "calendar" | "table";
+          kanban_group_by?: "status" | "priority" | "list";
+          calendar_color_by?: "list" | "priority";
+          table_columns?: string[];
+          table_sort_column?: string;
+          table_sort_direction?: "asc" | "desc";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 3: Goals
+      zeroed_goals: {
+        Row: {
+          id: string;
+          user_id: string;
+          title: string;
+          description: string | null;
+          target_type: "tasks_completed" | "focus_minutes" | "focus_sessions" | "streak_days" | "custom";
+          target_value: number;
+          current_value: number;
+          period: "daily" | "weekly" | "monthly" | "yearly" | "total";
+          start_date: string;
+          end_date: string | null;
+          status: "active" | "completed" | "failed" | "paused";
+          completed_at: string | null;
+          color: string;
+          icon: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          title: string;
+          description?: string | null;
+          target_type: "tasks_completed" | "focus_minutes" | "focus_sessions" | "streak_days" | "custom";
+          target_value: number;
+          current_value?: number;
+          period: "daily" | "weekly" | "monthly" | "yearly" | "total";
+          start_date?: string;
+          end_date?: string | null;
+          status?: "active" | "completed" | "failed" | "paused";
+          completed_at?: string | null;
+          color?: string;
+          icon?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          title?: string;
+          description?: string | null;
+          target_type?: "tasks_completed" | "focus_minutes" | "focus_sessions" | "streak_days" | "custom";
+          target_value?: number;
+          current_value?: number;
+          period?: "daily" | "weekly" | "monthly" | "yearly" | "total";
+          start_date?: string;
+          end_date?: string | null;
+          status?: "active" | "completed" | "failed" | "paused";
+          completed_at?: string | null;
+          color?: string;
+          icon?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 3: Habits
+      zeroed_habits: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          icon: string;
+          color: string;
+          frequency: "daily" | "weekdays" | "weekends" | "custom";
+          frequency_days: number[];
+          reminder_time: string | null;
+          target_per_day: number;
+          streak_current: number;
+          streak_best: number;
+          total_completions: number;
+          is_archived: boolean;
+          position: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          icon?: string;
+          color?: string;
+          frequency?: "daily" | "weekdays" | "weekends" | "custom";
+          frequency_days?: number[];
+          reminder_time?: string | null;
+          target_per_day?: number;
+          streak_current?: number;
+          streak_best?: number;
+          total_completions?: number;
+          is_archived?: boolean;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string | null;
+          icon?: string;
+          color?: string;
+          frequency?: "daily" | "weekdays" | "weekends" | "custom";
+          frequency_days?: number[];
+          reminder_time?: string | null;
+          target_per_day?: number;
+          streak_current?: number;
+          streak_best?: number;
+          total_completions?: number;
+          is_archived?: boolean;
+          position?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 3: Habit Logs
+      zeroed_habit_logs: {
+        Row: {
+          id: string;
+          habit_id: string;
+          user_id: string;
+          date: string;
+          completed_count: number;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          habit_id: string;
+          user_id: string;
+          date: string;
+          completed_count?: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          habit_id?: string;
+          user_id?: string;
+          date?: string;
+          completed_count?: number;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "zeroed_habit_logs_habit_id_fkey";
+            columns: ["habit_id"];
+            isOneToOne: false;
+            referencedRelation: "zeroed_habits";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      // Sprint 3: Achievements
+      zeroed_achievements: {
+        Row: {
+          id: string;
+          user_id: string;
+          achievement_type: string;
+          achievement_tier: number;
+          earned_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          achievement_type: string;
+          achievement_tier?: number;
+          earned_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          achievement_type?: string;
+          achievement_tier?: number;
+          earned_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 3: Points History
+      zeroed_points_history: {
+        Row: {
+          id: string;
+          user_id: string;
+          points: number;
+          reason: string;
+          reference_id: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          points: number;
+          reason: string;
+          reference_id?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          points?: number;
+          reason?: string;
+          reference_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 5: Task Templates
+      zeroed_task_templates: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          icon: string;
+          is_public: boolean;
+          use_count: number;
+          task_data: Json;
+          subtasks: Json | null;
+          tags: string[] | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          description?: string | null;
+          icon?: string;
+          is_public?: boolean;
+          use_count?: number;
+          task_data: Json;
+          subtasks?: Json | null;
+          tags?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          description?: string | null;
+          icon?: string;
+          is_public?: boolean;
+          use_count?: number;
+          task_data?: Json;
+          subtasks?: Json | null;
+          tags?: string[] | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 5: Project Templates
+      zeroed_project_templates: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          name: string;
+          description: string | null;
+          icon: string;
+          color: string;
+          category: string | null;
+          is_public: boolean;
+          use_count: number;
+          list_data: Json;
+          tasks: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          name: string;
+          description?: string | null;
+          icon?: string;
+          color?: string;
+          category?: string | null;
+          is_public?: boolean;
+          use_count?: number;
+          list_data: Json;
+          tasks: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          name?: string;
+          description?: string | null;
+          icon?: string;
+          color?: string;
+          category?: string | null;
+          is_public?: boolean;
+          use_count?: number;
+          list_data?: Json;
+          tasks?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 6: Time Entries
+      zeroed_time_entries: {
+        Row: {
+          id: string;
+          user_id: string;
+          task_id: string | null;
+          description: string | null;
+          start_time: string;
+          end_time: string | null;
+          duration_minutes: number;
+          is_manual: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          task_id?: string | null;
+          description?: string | null;
+          start_time: string;
+          end_time?: string | null;
+          duration_minutes?: number;
+          is_manual?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          task_id?: string | null;
+          description?: string | null;
+          start_time?: string;
+          end_time?: string | null;
+          duration_minutes?: number;
+          is_manual?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "zeroed_time_entries_task_id_fkey";
+            columns: ["task_id"];
+            isOneToOne: false;
+            referencedRelation: "zeroed_tasks";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+      // Sprint 6: Saved Reports
+      zeroed_saved_reports: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          report_type: "productivity" | "time" | "goals" | "custom";
+          config: Json;
+          schedule: "daily" | "weekly" | "monthly" | null;
+          last_generated_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          report_type: "productivity" | "time" | "goals" | "custom";
+          config?: Json;
+          schedule?: "daily" | "weekly" | "monthly" | null;
+          last_generated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          report_type?: "productivity" | "time" | "goals" | "custom";
+          config?: Json;
+          schedule?: "daily" | "weekly" | "monthly" | null;
+          last_generated_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      // Sprint 6: Weekly Stats
+      zeroed_weekly_stats: {
+        Row: {
+          id: string;
+          user_id: string;
+          week_start: string;
+          tasks_completed: number;
+          tasks_created: number;
+          focus_minutes: number;
+          sessions_completed: number;
+          most_productive_day: string | null;
+          avg_tasks_per_day: number;
+          avg_focus_per_day: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          week_start: string;
+          tasks_completed?: number;
+          tasks_created?: number;
+          focus_minutes?: number;
+          sessions_completed?: number;
+          most_productive_day?: string | null;
+          avg_tasks_per_day?: number;
+          avg_focus_per_day?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          week_start?: string;
+          tasks_completed?: number;
+          tasks_created?: number;
+          focus_minutes?: number;
+          sessions_completed?: number;
+          most_productive_day?: string | null;
+          avg_tasks_per_day?: number;
+          avg_focus_per_day?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -429,6 +918,18 @@ export type DailyStats = Tables<"zeroed_daily_stats">;
 export type Tag = Tables<"zeroed_tags">;
 export type TaskTag = Tables<"zeroed_task_tags">;
 export type SavedFilter = Tables<"zeroed_saved_filters">;
+// Sprint 2-6 table types
+export type ViewPreferencesRow = Tables<"zeroed_view_preferences">;
+export type GoalRow = Tables<"zeroed_goals">;
+export type HabitRow = Tables<"zeroed_habits">;
+export type HabitLogRow = Tables<"zeroed_habit_logs">;
+export type AchievementRow = Tables<"zeroed_achievements">;
+export type PointsHistoryRow = Tables<"zeroed_points_history">;
+export type TaskTemplateRow = Tables<"zeroed_task_templates">;
+export type ProjectTemplateRow = Tables<"zeroed_project_templates">;
+export type TimeEntryRow = Tables<"zeroed_time_entries">;
+export type SavedReportRow = Tables<"zeroed_saved_reports">;
+export type WeeklyStatsRow = Tables<"zeroed_weekly_stats">;
 
 // Extended task type with relations
 export interface TaskWithRelations extends Task {
@@ -436,4 +937,219 @@ export interface TaskWithRelations extends Task {
   zeroed_tags?: Tag[];
   subtasks?: Task[];
   subtask_progress?: { total: number; completed: number };
+}
+
+// ============================================================================
+// SPRINT 2: VIEW TYPES
+// ============================================================================
+
+export type ViewType = 'list' | 'kanban' | 'calendar' | 'table';
+export type KanbanGroupBy = 'status' | 'priority' | 'list';
+
+export interface ViewPreferences {
+  id: string;
+  user_id: string;
+  list_id: string | null;
+  view_type: ViewType;
+  kanban_group_by: KanbanGroupBy;
+  calendar_color_by: 'list' | 'priority';
+  table_columns: string[];
+  table_sort_column: string;
+  table_sort_direction: 'asc' | 'desc';
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================================
+// SPRINT 3: GOALS, HABITS, GAMIFICATION TYPES
+// ============================================================================
+
+export type GoalTargetType = 'tasks_completed' | 'focus_minutes' | 'focus_sessions' | 'streak_days' | 'custom';
+export type GoalPeriod = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'total';
+export type GoalStatus = 'active' | 'completed' | 'failed' | 'paused';
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string | null;
+  target_type: GoalTargetType;
+  target_value: number;
+  current_value: number;
+  period: GoalPeriod;
+  start_date: string;
+  end_date: string | null;
+  status: GoalStatus;
+  completed_at: string | null;
+  color: string;
+  icon: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type HabitFrequency = 'daily' | 'weekdays' | 'weekends' | 'custom';
+
+export interface Habit {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  frequency: HabitFrequency;
+  frequency_days: number[];
+  reminder_time: string | null;
+  target_per_day: number;
+  streak_current: number;
+  streak_best: number;
+  total_completions: number;
+  is_archived: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HabitLog {
+  id: string;
+  habit_id: string;
+  user_id: string;
+  date: string;
+  completed_count: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Achievement {
+  id: string;
+  user_id: string;
+  achievement_type: string;
+  achievement_tier: number;
+  earned_at: string;
+}
+
+export interface PointsHistory {
+  id: string;
+  user_id: string;
+  points: number;
+  reason: string;
+  reference_id: string | null;
+  created_at: string;
+}
+
+// ============================================================================
+// SPRINT 5: TEMPLATE TYPES
+// ============================================================================
+
+export interface TaskTemplate {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  is_public: boolean;
+  use_count: number;
+  task_data: {
+    title: string;
+    notes?: string;
+    priority?: string;
+    estimated_minutes?: number;
+  };
+  subtasks: Array<{ title: string; estimated_minutes: number }> | null;
+  tags: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectTemplate {
+  id: string;
+  user_id: string | null;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  category: string | null;
+  is_public: boolean;
+  use_count: number;
+  list_data: { name: string; color: string };
+  tasks: Array<{ title: string; estimated_minutes?: number; priority?: string }>;
+  created_at: string;
+}
+
+// ============================================================================
+// SPRINT 6: ANALYTICS & TIME TRACKING TYPES
+// ============================================================================
+
+export interface TimeEntry {
+  id: string;
+  user_id: string;
+  task_id: string | null;
+  description: string | null;
+  start_time: string;
+  end_time: string | null;
+  duration_minutes: number;
+  is_manual: boolean;
+  created_at: string;
+}
+
+export interface SavedReport {
+  id: string;
+  user_id: string;
+  name: string;
+  report_type: 'productivity' | 'time' | 'goals' | 'custom';
+  config: Record<string, unknown>;
+  schedule: 'daily' | 'weekly' | 'monthly' | null;
+  last_generated_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WeeklyStats {
+  id: string;
+  user_id: string;
+  week_start: string;
+  tasks_completed: number;
+  tasks_created: number;
+  focus_minutes: number;
+  sessions_completed: number;
+  most_productive_day: string | null;
+  avg_tasks_per_day: number;
+  avg_focus_per_day: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProductivityMetrics {
+  tasksCompleted: number;
+  tasksCreated: number;
+  completionRate: number;
+  focusMinutes: number;
+  sessionsCompleted: number;
+  avgTaskDuration: number;
+  estimationAccuracy: number;
+  currentStreak: number;
+  longestStreak: number;
+  tasksCompletedTrend: number;
+  focusMinutesTrend: number;
+}
+
+export interface DailyBreakdown {
+  date: string;
+  tasksCompleted: number;
+  focusMinutes: number;
+  sessionsCompleted: number;
+}
+
+export interface HourlyDistribution {
+  hour: number;
+  tasksCompleted: number;
+  focusMinutes: number;
+}
+
+export interface CategoryBreakdown {
+  listId: string;
+  listName: string;
+  color: string;
+  tasksCompleted: number;
+  focusMinutes: number;
+  percentage: number;
 }
