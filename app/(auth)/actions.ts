@@ -57,7 +57,7 @@ export async function signup(formData: FormData) {
 
       if (listError) {
         console.error("Failed to create default list:", listError);
-        return { error: `List error: ${listError.message}` };
+        return { error: `[v2] List error: ${listError.message}` };
       }
 
       // Upsert user preferences (may already exist from DB trigger)
@@ -70,12 +70,12 @@ export async function signup(formData: FormData) {
 
       if (prefsError) {
         console.error("Failed to create user preferences:", prefsError);
-        return { error: `Prefs error: ${prefsError.message}` };
+        return { error: `[v2] Prefs error: ${prefsError.message}` };
       }
     } catch (dbError: unknown) {
       console.error("Database error during signup setup:", dbError);
       const message = dbError instanceof Error ? dbError.message : "Unknown error";
-      return { error: `Setup error: ${message}` };
+      return { error: `[v2] Setup error: ${message}` };
     }
   }
 
