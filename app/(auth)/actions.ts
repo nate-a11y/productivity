@@ -41,28 +41,37 @@ export async function signup(formData: FormData) {
 
   // Create default Inbox list and user preferences for new users
   if (data.user) {
-    const listData: Insertable<"zeroed_lists"> = {
-      user_id: data.user.id,
-      name: "Inbox",
-      color: "#6366f1",
-      icon: "inbox",
-      position: 0,
-    };
-    const { error: listError } = await supabase.from("zeroed_lists").insert(listData);
+    try {
+      // Create default Inbox list
+      const listData: Insertable<"zeroed_lists"> = {
+        user_id: data.user.id,
+        name: "Inbox",
+        color: "#6366f1",
+        icon: "inbox",
+        position: 0,
+      };
+      const { error: listError } = await supabase.from("zeroed_lists").insert(listData);
 
-    if (listError) {
-      console.error("Failed to create default list:", listError);
-    }
+      if (listError) {
+        console.error("Failed to create default list:", listError);
+        return { error: "Database error saving new user" };
+      }
 
-    const prefsData: Insertable<"zeroed_user_preferences"> = {
-      user_id: data.user.id,
-    };
-    const { error: prefsError } = await supabase
-      .from("zeroed_user_preferences")
-      .insert(prefsData);
+      // Upsert user preferences (may already exist from DB trigger)
+      const prefsData: Insertable<"zeroed_user_preferences"> = {
+        user_id: data.user.id,
+      };
+      const { error: prefsError } = await supabase
+        .from("zeroed_user_preferences")
+        .upsert(prefsData, { onConflict: "user_id" });
 
-    if (prefsError) {
-      console.error("Failed to create user preferences:", prefsError);
+      if (prefsError) {
+        console.error("Failed to create user preferences:", prefsError);
+        // Non-fatal - preferences may already exist
+      }
+    } catch (dbError) {
+      console.error("Database error during signup setup:", dbError);
+      return { error: "Database error saving new user" };
     }
   }
 
