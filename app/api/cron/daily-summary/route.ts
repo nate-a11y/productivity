@@ -1,6 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { sendSlackDM, formatTodaySummary } from "@/lib/integrations/slack";
+import { sendSlackDM, sendSlackMessage, formatTodaySummary, SlackBlock } from "@/lib/integrations/slack";
+
+// Send notification to configured channel or DM
+async function sendNotification(
+  accessToken: string,
+  settings: Record<string, unknown>,
+  text: string,
+  blocks?: SlackBlock[]
+) {
+  const channelId = settings?.notification_channel_id as string | undefined;
+  const slackUserId = settings?.slack_user_id as string | undefined;
+
+  if (channelId && channelId !== "dm") {
+    return sendSlackMessage(accessToken, { channel: channelId, text, blocks });
+  } else if (slackUserId) {
+    return sendSlackDM(accessToken, slackUserId, text, blocks);
+  }
+  return { ok: false, error: "No destination configured" };
+}
 
 export async function GET(request: NextRequest) {
   // Use service role for cron jobs (no user context)
@@ -37,12 +55,18 @@ export async function GET(request: NextRequest) {
         continue;
       }
 
-      const slackUserId = settings.slack_user_id as string;
-      if (!slackUserId || !integration.access_token) {
+      if (!integration.access_token) {
         continue;
       }
 
       try {
+        // Get user's display name
+        const { data: prefs } = await supabase
+          .from("zeroed_user_preferences")
+          .select("display_name")
+          .eq("user_id", integration.user_id)
+          .single();
+
         // Get today's tasks for this user
         const { data: tasks } = await supabase
           .from("zeroed_tasks")
@@ -52,12 +76,15 @@ export async function GET(request: NextRequest) {
           .neq("status", "cancelled")
           .order("due_time", { ascending: true, nullsFirst: false });
 
-        // Send the summary
+        // Send the summary with personalized greeting
         const blocks = formatTodaySummary(tasks || []);
-        await sendSlackDM(
+        const greeting = prefs?.display_name
+          ? `Good morning ${prefs.display_name}! Here's your task summary for today.`
+          : `Good morning! Here's your task summary for today.`;
+        await sendNotification(
           integration.access_token,
-          slackUserId,
-          `Good morning! Here's your task summary for today.`,
+          settings,
+          greeting,
           blocks
         );
 
