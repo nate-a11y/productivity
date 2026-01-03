@@ -6,17 +6,17 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, '..', 'public');
 
-// SVG content for the icon - orange background with white B
+// SVG content for the icon - orange background with black B
 const svgContent = `<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="96" fill="#ff6b00"/>
-  <text x="256" y="340" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="320" font-weight="700" fill="white" text-anchor="middle">B</text>
+  <text x="256" y="340" font-family="system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="320" font-weight="700" fill="#0a0a0a" text-anchor="middle">B</text>
 </svg>`;
 
 // For PNG generation, we need to use a simpler SVG that sharp can render
 // Sharp has limited text support, so we'll create a simpler version
 const simpleSvg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="96" fill="#ff6b00"/>
-  <path fill="white" d="M170 100h120c35 0 63 10 84 30s31 47 31 80c0 25-7 46-21 63s-33 28-57 33v2c30 4 53 15 69 35s24 45 24 75c0 38-13 68-38 90s-60 33-105 33H170V100zm60 180h55c24 0 42-5 54-16s18-26 18-45c0-20-6-35-17-45s-29-15-52-15h-58v121zm0 184h65c27 0 47-6 61-19s21-30 21-52c0-23-7-40-22-52s-36-18-64-18h-61v141z"/>
+  <path fill="#0a0a0a" d="M170 100h120c35 0 63 10 84 30s31 47 31 80c0 25-7 46-21 63s-33 28-57 33v2c30 4 53 15 69 35s24 45 24 75c0 38-13 68-38 90s-60 33-105 33H170V100zm60 180h55c24 0 42-5 54-16s18-26 18-45c0-20-6-35-17-45s-29-15-52-15h-58v121zm0 184h65c27 0 47-6 61-19s21-30 21-52c0-23-7-40-22-52s-36-18-64-18h-61v141z"/>
 </svg>`;
 
 async function generateIcons() {
