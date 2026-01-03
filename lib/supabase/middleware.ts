@@ -43,8 +43,11 @@ export async function updateSession(request: NextRequest) {
   const isAuthCallback = request.nextUrl.pathname.startsWith("/auth/callback");
   const isLandingPage = request.nextUrl.pathname === "/";
   const isApiRoute = request.nextUrl.pathname.startsWith("/api");
+  const isPublicPage =
+    request.nextUrl.pathname === "/privacy" ||
+    request.nextUrl.pathname === "/terms";
   const isDashboardRoute =
-    !isAuthRoute && !isAuthCallback && !isApiRoute && !isLandingPage;
+    !isAuthRoute && !isAuthCallback && !isApiRoute && !isLandingPage && !isPublicPage;
 
   if (!user && isDashboardRoute) {
     // No user trying to access protected routes, redirect to login
