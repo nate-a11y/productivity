@@ -87,7 +87,7 @@ export function IntegrationsSettings() {
           <p>In Raycast extension preferences, enter:</p>
           <ul className="list-disc list-inside">
             <li>Supabase URL: <code className="bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_SUPABASE_URL || "[Your Supabase URL]"}</code></li>
-            <li>Supabase Anon Key: <code className="bg-muted px-1 rounded">[from Supabase dashboard]</code></li>
+            <li>Supabase Anon Key: <code className="bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "[Your Anon Key]"}</code></li>
             <li>Access Token: <code className="bg-muted px-1 rounded">[generated above]</code></li>
           </ul>
         </div>

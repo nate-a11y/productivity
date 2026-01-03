@@ -4,6 +4,9 @@ const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID!;
 const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET!;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET!;
 
+// Remove trailing slash from app URL
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+
 export interface SlackOAuthResponse {
   ok: boolean;
   access_token: string;
@@ -57,7 +60,7 @@ export function getSlackAuthUrl(state: string): string {
   const params = new URLSearchParams({
     client_id: SLACK_CLIENT_ID,
     scope: "chat:write,commands,users:read",
-    redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/slack/callback`,
+    redirect_uri: `${APP_URL}/api/integrations/slack/callback`,
     state,
   });
 
@@ -77,7 +80,7 @@ export async function exchangeCodeForToken(code: string): Promise<SlackOAuthResp
       client_id: SLACK_CLIENT_ID,
       client_secret: SLACK_CLIENT_SECRET,
       code,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/slack/callback`,
+      redirect_uri: `${APP_URL}/api/integrations/slack/callback`,
     }),
   });
 
