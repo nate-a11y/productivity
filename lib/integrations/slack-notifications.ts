@@ -7,6 +7,9 @@ interface SlackNotificationSettings {
   notify_daily_summary?: boolean;
   notify_task_created?: boolean;
   notify_task_completed?: boolean;
+  notify_streak?: boolean;
+  notify_weekly_summary?: boolean;
+  notify_overdue?: boolean;
   slack_user_id?: string;
 }
 
@@ -116,5 +119,60 @@ export async function notifyTaskCompleted(
     console.log(`Sent task completed notification for task ${task.id}`);
   } catch (error) {
     console.error("Failed to send task completed notification:", error);
+  }
+}
+
+// Notify when streak increases
+export async function notifyStreakUpdate(
+  userId: string,
+  newStreak: number,
+  displayName?: string | null
+) {
+  try {
+    const integration = await getSlackIntegration(userId);
+    if (!integration) return;
+
+    // Check if streak notifications are enabled
+    if (integration.settings?.notify_streak !== true) return;
+
+    // Only notify for milestone streaks or every 7 days
+    const isMilestone = [3, 7, 14, 21, 30, 50, 100, 365].includes(newStreak);
+    const isWeekly = newStreak > 0 && newStreak % 7 === 0;
+
+    if (!isMilestone && !isWeekly && newStreak < 3) return;
+
+    const greeting = displayName ? `${displayName}, ` : "";
+    let message = "";
+    let emoji = "🔥";
+
+    if (newStreak >= 100) {
+      emoji = "💯";
+      message = `${greeting}LEGENDARY! ${newStreak} day streak!`;
+    } else if (newStreak >= 30) {
+      emoji = "🏆";
+      message = `${greeting}incredible! ${newStreak} day streak!`;
+    } else if (newStreak >= 7) {
+      emoji = "⭐";
+      message = `${greeting}${newStreak} day streak! Keep it up!`;
+    } else {
+      message = `${greeting}${newStreak} day streak! You're on fire!`;
+    }
+
+    const text = `${emoji} ${message}`;
+
+    const blocks: SlackBlock[] = [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `${emoji} *Streak Update*\n${message}`,
+        },
+      },
+    ];
+
+    await sendNotification(integration.accessToken, integration.settings, text, blocks);
+    console.log(`Sent streak notification for user ${userId}: ${newStreak} days`);
+  } catch (error) {
+    console.error("Failed to send streak notification:", error);
   }
 }

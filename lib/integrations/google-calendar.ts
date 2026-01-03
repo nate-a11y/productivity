@@ -549,3 +549,135 @@ export async function pullChangesFromCalendar(userId: string): Promise<{ updated
 
   return { updated, created };
 }
+
+/**
+ * Set up a webhook watch for calendar changes
+ * Google will POST to our webhook when events change
+ */
+export async function setupCalendarWatch(userId: string): Promise<{ success: boolean; expiration?: string }> {
+  const supabase = await createClient();
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    return { success: false };
+  }
+
+  const { data: integration } = await supabase
+    .from("zeroed_integrations")
+    .select("settings")
+    .eq("user_id", userId)
+    .eq("provider", "google_calendar")
+    .single();
+
+  const settings = integration?.settings as Record<string, unknown> | null;
+  const calendarId = (settings?.calendar_id as string) || "primary";
+
+  const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/integrations/google/webhook`;
+  const channelId = `bruh-calendar-${userId}`;
+
+  try {
+    const response = await fetch(
+      `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(calendarId)}/events/watch`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: channelId,
+          type: "web_hook",
+          address: webhookUrl,
+          // Watch expires in 7 days (max allowed by Google)
+          expiration: String(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error("Failed to set up calendar watch:", error);
+      return { success: false };
+    }
+
+    const data = await response.json();
+
+    // Store watch info in settings
+    await supabase
+      .from("zeroed_integrations")
+      .update({
+        settings: {
+          ...settings,
+          watch_channel_id: data.id,
+          watch_resource_id: data.resourceId,
+          watch_expiration: data.expiration,
+        },
+      })
+      .eq("user_id", userId)
+      .eq("provider", "google_calendar");
+
+    console.log(`Calendar watch set up for user ${userId}, expires: ${data.expiration}`);
+    return { success: true, expiration: data.expiration };
+  } catch (error) {
+    console.error("Error setting up calendar watch:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Stop watching a calendar (cleanup)
+ */
+export async function stopCalendarWatch(userId: string): Promise<boolean> {
+  const supabase = await createClient();
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    return false;
+  }
+
+  const { data: integration } = await supabase
+    .from("zeroed_integrations")
+    .select("settings")
+    .eq("user_id", userId)
+    .eq("provider", "google_calendar")
+    .single();
+
+  const settings = integration?.settings as Record<string, unknown> | null;
+  const channelId = settings?.watch_channel_id as string;
+  const resourceId = settings?.watch_resource_id as string;
+
+  if (!channelId || !resourceId) {
+    return true; // Nothing to stop
+  }
+
+  try {
+    await fetch("https://www.googleapis.com/calendar/v3/channels/stop", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        id: channelId,
+        resourceId: resourceId,
+      }),
+    });
+
+    // Clear watch info from settings - cast to any to avoid type issues
+    const newSettings = { ...(settings || {}) };
+    delete (newSettings as Record<string, unknown>).watch_channel_id;
+    delete (newSettings as Record<string, unknown>).watch_resource_id;
+    delete (newSettings as Record<string, unknown>).watch_expiration;
+    await supabase
+      .from("zeroed_integrations")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .update({ settings: newSettings as any })
+      .eq("user_id", userId)
+      .eq("provider", "google_calendar");
+
+    return true;
+  } catch (error) {
+    console.error("Error stopping calendar watch:", error);
+    return false;
+  }
+}

@@ -56,6 +56,15 @@ export function SlackSettings({ integration }: SlackSettingsProps) {
   const [notifyTaskCompleted, setNotifyTaskCompleted] = useState(
     getSettingsValue(integration?.settings ?? null, "notify_task_completed", false)
   );
+  const [notifyWeeklySummary, setNotifyWeeklySummary] = useState(
+    getSettingsValue(integration?.settings ?? null, "notify_weekly_summary", false)
+  );
+  const [notifyOverdue, setNotifyOverdue] = useState(
+    getSettingsValue(integration?.settings ?? null, "notify_overdue", false)
+  );
+  const [notifyStreak, setNotifyStreak] = useState(
+    getSettingsValue(integration?.settings ?? null, "notify_streak", false)
+  );
 
   useEffect(() => {
     if (integration) {
@@ -286,6 +295,57 @@ export function SlackSettings({ integration }: SlackSettingsProps) {
               onCheckedChange={(checked) => {
                 setNotifyTaskCompleted(checked);
                 updateSettings({ notify_task_completed: checked });
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="notify-weekly">Weekly Summary</Label>
+              <p className="text-xs text-muted-foreground">
+                Monday morning recap of last week
+              </p>
+            </div>
+            <Switch
+              id="notify-weekly"
+              checked={notifyWeeklySummary}
+              onCheckedChange={(checked) => {
+                setNotifyWeeklySummary(checked);
+                updateSettings({ notify_weekly_summary: checked });
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="notify-overdue">Overdue Alerts</Label>
+              <p className="text-xs text-muted-foreground">
+                Get nudged about overdue tasks
+              </p>
+            </div>
+            <Switch
+              id="notify-overdue"
+              checked={notifyOverdue}
+              onCheckedChange={(checked) => {
+                setNotifyOverdue(checked);
+                updateSettings({ notify_overdue: checked });
+              }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="notify-streak">Streak Milestones</Label>
+              <p className="text-xs text-muted-foreground">
+                Celebrate your productivity streaks
+              </p>
+            </div>
+            <Switch
+              id="notify-streak"
+              checked={notifyStreak}
+              onCheckedChange={(checked) => {
+                setNotifyStreak(checked);
+                updateSettings({ notify_streak: checked });
               }}
             />
           </div>
