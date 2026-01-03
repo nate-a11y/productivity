@@ -11,16 +11,17 @@ import { toast } from "sonner";
 interface GoogleCalendarSettingsProps {
   integration: {
     id: string;
-    provider_email: string;
-    settings: {
-      calendar_id?: string;
-      calendar_name?: string;
-      sync_tasks_to_calendar?: boolean;
-      sync_completed_tasks?: boolean;
-    };
+    provider_email: string | null;
+    settings: Record<string, unknown> | null;
     sync_enabled: boolean;
     last_sync_at: string | null;
   } | null;
+}
+
+// Helper to safely access settings
+function getSettingsValue<T>(settings: Record<string, unknown> | null, key: string, defaultValue: T): T {
+  if (!settings || typeof settings !== 'object') return defaultValue;
+  return (settings[key] as T) ?? defaultValue;
 }
 
 export function GoogleCalendarSettings({ integration }: GoogleCalendarSettingsProps) {
@@ -120,14 +121,14 @@ export function GoogleCalendarSettings({ integration }: GoogleCalendarSettingsPr
           </span>
         </CardTitle>
         <CardDescription>
-          Syncing with {integration.provider_email}
+          Syncing with {integration.provider_email || "Google Calendar"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Calendar info */}
         <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
           <div>
-            <p className="font-medium text-sm">{integration.settings.calendar_name || "Primary Calendar"}</p>
+            <p className="font-medium text-sm">{getSettingsValue(integration.settings, "calendar_name", "Primary Calendar")}</p>
             <p className="text-xs text-muted-foreground">
               {integration.last_sync_at
                 ? `Last synced ${new Date(integration.last_sync_at).toLocaleString()}`
