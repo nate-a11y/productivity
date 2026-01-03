@@ -62,9 +62,11 @@
 alter table zeroed_tags enable row level security;
 alter table zeroed_task_tags enable row level security;
 
+drop policy if exists "Users can CRUD own tags" on zeroed_tags;
 create policy "Users can CRUD own tags" on zeroed_tags
   for all using (auth.uid() = user_id);
 
+drop policy if exists "Users can CRUD own task_tags" on zeroed_task_tags;
 create policy "Users can CRUD own task_tags" on zeroed_task_tags
   for all using (
     exists (
@@ -169,10 +171,12 @@ create table if not exists zeroed_saved_filters (
 -- RLS
 alter table zeroed_saved_filters enable row level security;
 
+drop policy if exists "Users can CRUD own saved_filters" on zeroed_saved_filters;
 create policy "Users can CRUD own saved_filters" on zeroed_saved_filters
   for all using (auth.uid() = user_id);
 
 -- Trigger
+drop trigger if exists zeroed_saved_filters_updated_at on zeroed_saved_filters;
 create trigger zeroed_saved_filters_updated_at before update on zeroed_saved_filters
   for each row execute function zeroed_handle_updated_at();
 
