@@ -9,6 +9,10 @@ interface HealthStatus {
   healthy: boolean;
   error?: string;
   lastSync?: string | null;
+  lastSyncError?: {
+    message: string;
+    timestamp: string;
+  } | null;
 }
 
 export async function GET() {
@@ -29,11 +33,15 @@ export async function GET() {
     const health: HealthStatus[] = [];
 
     for (const integration of integrations || []) {
+      const settings = integration.settings as Record<string, unknown> | null;
+      const lastSyncError = settings?.last_sync_error as { message: string; timestamp: string } | undefined;
+
       const status: HealthStatus = {
         provider: integration.provider,
         connected: !!integration.access_token,
         healthy: false,
         lastSync: integration.last_sync_at,
+        lastSyncError: lastSyncError || null,
       };
 
       if (!integration.access_token) {
