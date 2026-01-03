@@ -14,9 +14,10 @@ const svgContent = `<svg width="512" height="512" viewBox="0 0 512 512" fill="no
 
 // For PNG generation, we need to use a simpler SVG that sharp can render
 // Sharp has limited text support, so we'll create a simpler version
+// B is centered and sized at ~50% of icon like the Logo component
 const simpleSvg = `<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
   <rect width="512" height="512" rx="96" fill="#ff6b00"/>
-  <path fill="#0a0a0a" d="M170 100h120c35 0 63 10 84 30s31 47 31 80c0 25-7 46-21 63s-33 28-57 33v2c30 4 53 15 69 35s24 45 24 75c0 38-13 68-38 90s-60 33-105 33H170V100zm60 180h55c24 0 42-5 54-16s18-26 18-45c0-20-6-35-17-45s-29-15-52-15h-58v121zm0 184h65c27 0 47-6 61-19s21-30 21-52c0-23-7-40-22-52s-36-18-64-18h-61v141z"/>
+  <path fill="#0a0a0a" d="M168 144h100c28 0 50 8 67 24s25 37 25 64c0 20-6 37-17 50s-26 22-46 27v1c24 4 42 13 55 28s19 36 19 60c0 30-10 54-30 72s-48 26-84 26H168V144zm48 144h44c19 0 34-4 43-13s14-21 14-36c0-16-5-28-14-36s-23-12-42-12h-45v97zm0 147h52c22 0 38-5 49-15s16-24 16-42c0-18-6-32-17-41s-29-14-52-14h-48v112z"/>
 </svg>`;
 
 async function generateIcons() {
