@@ -12,6 +12,7 @@ import {
   Maximize2,
   GripHorizontal,
   PictureInPicture2,
+  Smartphone,
   X
 } from "lucide-react";
 import { cn, formatTimerDisplay } from "@/lib/utils";
@@ -24,10 +25,24 @@ interface FloatingTimerProps {
   autoOpenPiP?: boolean;
 }
 
-// Check if Document Picture-in-Picture is supported
+// Check if Document Picture-in-Picture is supported (desktop only)
 function isPiPSupported(): boolean {
   if (typeof window === "undefined") return false;
   return "documentPictureInPicture" in window;
+}
+
+// Check if Wake Lock API is supported (works on mobile)
+function isWakeLockSupported(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return "wakeLock" in navigator;
+}
+
+// Check if device is mobile
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  ) || window.innerWidth < 768;
 }
 
 export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerProps) {
@@ -38,6 +53,10 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
   const [pipContainer, setPipContainer] = useState<HTMLElement | null>(null);
   const [pipSupported, setPipSupported] = useState(false);
   const [pipError, setPipError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const dragRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
   const hasTriedAutoPiP = useRef(false);
@@ -53,9 +72,69 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
     stopTimer,
   } = useTimerStore();
 
-  // Check PiP support on mount
+  // Check PiP support and mobile on mount
   useEffect(() => {
     setPipSupported(isPiPSupported());
+    setIsMobile(isMobileDevice());
+
+    // Handle resize for mobile detection
+    const handleResize = () => setIsMobile(isMobileDevice());
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Wake Lock - keeps screen on during timer (especially useful for mobile)
+  const requestWakeLock = useCallback(async () => {
+    if (!isWakeLockSupported()) return false;
+
+    try {
+      wakeLockRef.current = await navigator.wakeLock.request("screen");
+      setWakeLockActive(true);
+
+      // Re-acquire on visibility change (when user returns to tab)
+      wakeLockRef.current.addEventListener("release", () => {
+        setWakeLockActive(false);
+      });
+
+      return true;
+    } catch (err) {
+      console.error("Wake Lock error:", err);
+      return false;
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      await wakeLockRef.current.release();
+      wakeLockRef.current = null;
+      setWakeLockActive(false);
+    }
+  }, []);
+
+  // Auto-acquire wake lock when timer is running
+  useEffect(() => {
+    if (state === "running") {
+      requestWakeLock();
+    } else if (state === "idle") {
+      releaseWakeLock();
+    }
+  }, [state, requestWakeLock, releaseWakeLock]);
+
+  // Re-acquire wake lock when page becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && state === "running") {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [state, requestWakeLock]);
+
+  // Toggle mobile fullscreen mode
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => !prev);
   }, []);
 
   // Open Picture-in-Picture window
@@ -314,6 +393,105 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
 
   if (!isActive) return null;
 
+  // Mobile fullscreen mode
+  if (isFullscreen) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6"
+      >
+        {/* Progress bar at top */}
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-muted">
+          <motion.div
+            className={cn(
+              "h-full",
+              sessionType === "focus" ? "bg-primary" : "bg-green-500"
+            )}
+            initial={false}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5 }}
+          />
+        </div>
+
+        {/* Close button */}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="absolute top-4 right-4 h-10 w-10"
+          onClick={() => setIsFullscreen(false)}
+        >
+          <X className="h-5 w-5" />
+        </Button>
+
+        {/* Wake lock indicator */}
+        {wakeLockActive && (
+          <div className="absolute top-4 left-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            Screen stays on
+          </div>
+        )}
+
+        {/* Session type badge */}
+        <span className={cn(
+          "text-sm font-medium px-4 py-1.5 rounded-full mb-6",
+          sessionType === "focus"
+            ? "bg-primary/10 text-primary"
+            : "bg-green-500/10 text-green-500"
+        )}>
+          {sessionType === "focus" ? "Focus Session" : sessionType === "short_break" ? "Short Break" : "Long Break"}
+        </span>
+
+        {/* Big timer */}
+        <div
+          className={cn(
+            "font-mono text-7xl sm:text-8xl font-bold tabular-nums mb-4",
+            state === "running" && "text-primary",
+            state === "paused" && "text-muted-foreground"
+          )}
+        >
+          {formatTimerDisplay(timeRemaining)}
+        </div>
+
+        {/* Task name */}
+        {task && (
+          <p className="text-lg text-muted-foreground mb-8 max-w-xs text-center">
+            {task.title}
+          </p>
+        )}
+
+        {/* Controls */}
+        <div className="flex items-center gap-4">
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 w-14"
+            onClick={stopTimer}
+          >
+            <Square className="h-6 w-6" />
+          </Button>
+          {state === "paused" ? (
+            <Button size="lg" className="h-14 px-8" onClick={resumeTimer}>
+              <Play className="h-6 w-6 mr-2" />
+              Resume
+            </Button>
+          ) : (
+            <Button size="lg" className="h-14 px-8" onClick={pauseTimer}>
+              <Pause className="h-6 w-6 mr-2" />
+              Pause
+            </Button>
+          )}
+        </div>
+
+        {/* Tip */}
+        <p className="absolute bottom-6 text-xs text-muted-foreground text-center">
+          {wakeLockActive ? "Your screen will stay on while the timer runs" : "Tap the timer to exit fullscreen"}
+        </p>
+      </motion.div>
+    );
+  }
+
   return (
     <AnimatePresence>
       <motion.div
@@ -402,7 +580,8 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
                   >
                     <ChevronDown className="h-3 w-3" />
                   </Button>
-                  {pipSupported && (
+                  {/* Desktop: PiP button, Mobile: Fullscreen button */}
+                  {pipSupported && !isMobile && (
                     <Button
                       size="icon"
                       variant="ghost"
@@ -411,6 +590,17 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
                       title="Pop out window (stays on top of other apps)"
                     >
                       <PictureInPicture2 className="h-3 w-3" />
+                    </Button>
+                  )}
+                  {isMobile && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={toggleFullscreen}
+                      title="Fullscreen timer"
+                    >
+                      <Smartphone className="h-3 w-3" />
                     </Button>
                   )}
                   <Link href="/focus">
@@ -424,6 +614,14 @@ export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerPro
               {/* PiP Error */}
               {pipError && (
                 <p className="text-xs text-red-400 text-center">{pipError}</p>
+              )}
+
+              {/* Wake lock indicator (mobile) */}
+              {isMobile && wakeLockActive && (
+                <div className="flex items-center justify-center gap-1.5 text-[10px] text-muted-foreground">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  Screen on
+                </div>
               )}
 
               {/* Timer display */}
