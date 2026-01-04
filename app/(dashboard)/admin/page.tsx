@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
 import { Header } from "@/components/dashboard/header";
 import { AdminDashboard } from "./admin-dashboard";
@@ -15,11 +15,11 @@ export default async function AdminPage() {
     redirect("/today");
   }
 
-  // Fetch admin stats using service role or admin queries
-  // For now, we'll fetch what we can with the user's permissions
+  // Use service client for admin queries (bypasses RLS)
+  const adminClient = createServiceClient();
 
-  // Get total users count (this would need service role in production)
-  const { count: totalUsers } = await supabase
+  // Get total users count
+  const { count: totalUsers } = await adminClient
     .from("zeroed_user_preferences")
     .select("*", { count: "exact", head: true });
 
@@ -27,24 +27,24 @@ export default async function AdminPage() {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const { count: recentSignups } = await supabase
+  const { count: recentSignups } = await adminClient
     .from("zeroed_user_preferences")
     .select("*", { count: "exact", head: true })
     .gte("created_at", sevenDaysAgo.toISOString());
 
   // Get total tasks
-  const { count: totalTasks } = await supabase
+  const { count: totalTasks } = await adminClient
     .from("zeroed_tasks")
     .select("*", { count: "exact", head: true });
 
   // Get completed tasks
-  const { count: completedTasks } = await supabase
+  const { count: completedTasks } = await adminClient
     .from("zeroed_tasks")
     .select("*", { count: "exact", head: true })
     .eq("status", "completed");
 
   // Get total teams
-  const { count: totalTeams } = await (supabase as any)
+  const { count: totalTeams } = await adminClient
     .from("zeroed_teams")
     .select("*", { count: "exact", head: true });
 
@@ -52,13 +52,13 @@ export default async function AdminPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const { count: focusSessionsToday } = await supabase
+  const { count: focusSessionsToday } = await adminClient
     .from("zeroed_focus_sessions")
     .select("*", { count: "exact", head: true })
     .gte("started_at", today.toISOString());
 
   // Fetch recent user activity (users with preferences)
-  const { data: recentUsers } = await supabase
+  const { data: recentUsers } = await adminClient
     .from("zeroed_user_preferences")
     .select("user_id, display_name, created_at, updated_at")
     .order("created_at", { ascending: false })
