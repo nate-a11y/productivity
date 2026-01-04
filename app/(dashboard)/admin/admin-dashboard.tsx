@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import {
   Users,
   CheckSquare,
@@ -17,6 +18,9 @@ import {
   Mail,
   Ban,
   Trash2,
+  Activity,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,6 +47,23 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 interface AdminStats {
@@ -62,6 +83,16 @@ interface RecentUser {
   updated_at: string;
 }
 
+interface AdminUser {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+  last_sign_in_at: string | null;
+  task_count: number;
+  is_banned: boolean;
+}
+
 interface AdminDashboardProps {
   stats: AdminStats;
   recentUsers: RecentUser[];
@@ -70,11 +101,96 @@ interface AdminDashboardProps {
 export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showActivityDialog, setShowActivityDialog] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const filteredUsers = recentUsers.filter(
+  // Fetch users when Users tab is active
+  useEffect(() => {
+    if (activeTab === "users" && users.length === 0) {
+      fetchUsers();
+    }
+  }, [activeTab]);
+
+  async function fetchUsers() {
+    setLoadingUsers(true);
+    try {
+      const res = await fetch("/api/admin/users");
+      const data = await res.json();
+      if (data.users) {
+        setUsers(data.users);
+      }
+    } catch {
+      toast.error("Failed to fetch users");
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
+  async function handleSuspendUser(user: AdminUser) {
+    setActionLoading(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: user.is_banned ? "unsuspend" : "suspend" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(data.message);
+        setUsers((prev) =>
+          prev.map((u) => (u.id === user.id ? { ...u, is_banned: !u.is_banned } : u))
+        );
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Action failed");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!selectedUser) return;
+    setActionLoading(selectedUser.id);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("User deleted");
+        setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Delete failed");
+    } finally {
+      setActionLoading(null);
+      setShowDeleteDialog(false);
+      setSelectedUser(null);
+    }
+  }
+
+  function handleSendEmail(user: AdminUser) {
+    window.location.href = `mailto:${user.email}`;
+  }
+
+  function handleViewActivity(user: AdminUser) {
+    setSelectedUser(user);
+    setShowActivityDialog(true);
+  }
+
+  const filteredUsers = users.filter(
     (user) =>
       user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.user_id.toLowerCase().includes(searchQuery.toLowerCase())
+      user.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -203,14 +319,18 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search users..."
+                placeholder="Search users by name or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <Button variant="outline" size="sm">
-              Export
+            <Button variant="outline" size="sm" onClick={fetchUsers} disabled={loadingUsers}>
+              {loadingUsers ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
             </Button>
           </div>
 
@@ -219,72 +339,114 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>User</TableHead>
-                  <TableHead>User ID</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Tasks</TableHead>
                   <TableHead>Joined</TableHead>
-                  <TableHead>Last Active</TableHead>
+                  <TableHead>Last Sign In</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.user_id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-xs font-medium text-primary">
-                            {user.display_name?.[0]?.toUpperCase() || "?"}
-                          </span>
-                        </div>
-                        <span className="font-medium">
-                          {user.display_name || "Unnamed User"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {user.user_id.slice(0, 8)}...
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(user.created_at), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(user.updated_at), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Mail className="h-4 w-4 mr-2" />
-                            Send Email
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Users className="h-4 w-4 mr-2" />
-                            View Activity
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-amber-600">
-                            <Ban className="h-4 w-4 mr-2" />
-                            Suspend User
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-destructive">
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete User
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {filteredUsers.length === 0 && (
+                {loadingUsers ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No users found
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                     </TableCell>
                   </TableRow>
+                ) : (
+                  <>
+                    {filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <span className="text-xs font-medium text-primary">
+                                {user.display_name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "?"}
+                              </span>
+                            </div>
+                            <span className="font-medium">
+                              {user.display_name || "Unnamed"}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {user.email}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{user.task_count}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {format(new Date(user.created_at), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {user.last_sign_in_at
+                            ? format(new Date(user.last_sign_in_at), "MMM d, yyyy")
+                            : "Never"}
+                        </TableCell>
+                        <TableCell>
+                          {user.is_banned ? (
+                            <Badge variant="destructive">Suspended</Badge>
+                          ) : (
+                            <Badge variant="default">Active</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={actionLoading === user.id}
+                              >
+                                {actionLoading === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <MoreHorizontal className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => handleSendEmail(user)}>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Send Email
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleViewActivity(user)}>
+                                <Activity className="h-4 w-4 mr-2" />
+                                View Activity
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className={user.is_banned ? "text-green-600" : "text-amber-600"}
+                                onClick={() => handleSuspendUser(user)}
+                              >
+                                <Ban className="h-4 w-4 mr-2" />
+                                {user.is_banned ? "Unsuspend User" : "Suspend User"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  setSelectedUser(user);
+                                  setShowDeleteDialog(true);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete User
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {filteredUsers.length === 0 && !loadingUsers && (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                          No users found
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
                 )}
               </TableBody>
             </Table>
@@ -362,6 +524,83 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedUser?.display_name || selectedUser?.email}?
+              This action cannot be undone. All their data will be permanently removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteUser}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* User Activity Dialog */}
+      <Dialog open={showActivityDialog} onOpenChange={setShowActivityDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>User Activity</DialogTitle>
+            <DialogDescription>
+              Activity summary for {selectedUser?.display_name || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedUser && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Tasks Created</p>
+                  <p className="text-2xl font-bold">{selectedUser.task_count}</p>
+                </div>
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="text-sm text-muted-foreground">Account Status</p>
+                  <p className="text-2xl font-bold">
+                    {selectedUser.is_banned ? "Suspended" : "Active"}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">Email</span>
+                  <span className="text-sm font-medium">{selectedUser.email}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">User ID</span>
+                  <span className="text-sm font-mono">{selectedUser.id}</span>
+                </div>
+                <div className="flex justify-between py-2 border-b">
+                  <span className="text-sm text-muted-foreground">Joined</span>
+                  <span className="text-sm">
+                    {format(new Date(selectedUser.created_at), "PPP")}
+                  </span>
+                </div>
+                <div className="flex justify-between py-2">
+                  <span className="text-sm text-muted-foreground">Last Sign In</span>
+                  <span className="text-sm">
+                    {selectedUser.last_sign_in_at
+                      ? format(new Date(selectedUser.last_sign_in_at), "PPP")
+                      : "Never"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
