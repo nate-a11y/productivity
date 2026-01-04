@@ -1,10 +1,18 @@
 import { Resend } from "resend";
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy initialization - only create client when needed (not at build time)
+let resendClient: Resend | null = null;
 
-// Default sender - update with your verified domain
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Zeroed <noreply@zeroed.app>";
+function getResendClient(): Resend {
+  if (!resendClient) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resendClient;
+}
+
+function getFromEmail(): string {
+  return process.env.RESEND_FROM_EMAIL || "Zeroed <noreply@zeroed.app>";
+}
 
 export interface SendEmailOptions {
   to: string | string[];
@@ -21,8 +29,9 @@ export async function sendEmail({ to, subject, html, text, replyTo }: SendEmailO
   }
 
   try {
+    const resend = getResendClient();
     const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
+      from: getFromEmail(),
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
