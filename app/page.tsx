@@ -254,7 +254,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-6 text-center">
             <div className="p-6">
               <p className="text-4xl font-bold text-primary mb-2">$0</p>
-              <p className="text-muted-foreground text-sm">Free forever. No trial BS.</p>
+              <p className="text-muted-foreground text-sm">Free to start. No trial BS.</p>
             </div>
             <div className="p-6">
               <p className="text-4xl font-bold text-primary mb-2">AI</p>
@@ -272,7 +272,7 @@ export default function LandingPage() {
       <section className="max-w-4xl mx-auto px-6 py-24 text-center">
         <h2 className="text-4xl font-display font-bold text-foreground mb-4">Ready?</h2>
         <p className="text-muted-foreground mb-8">
-          Free forever. No credit card. No excuses.
+          Free to start. No credit card required.
         </p>
         <div className="flex items-center justify-center gap-4">
           <Button size="lg" asChild>
