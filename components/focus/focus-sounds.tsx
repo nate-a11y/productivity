@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Volume2, VolumeX, CloudRain, Coffee, Music, Wind, Trees } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Volume2, VolumeX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -11,29 +11,14 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { updateFocusSoundPreference } from "@/app/(dashboard)/actions";
-
-export type FocusSoundType = "none" | "rain" | "cafe" | "lofi" | "whitenoise" | "nature";
-
-interface SoundOption {
-  id: FocusSoundType;
-  name: string;
-  icon: React.ReactNode;
-  // Using Web Audio API to generate sounds
-  frequency?: number;
-  type?: OscillatorType;
-}
-
-const SOUND_OPTIONS: SoundOption[] = [
-  { id: "none", name: "None", icon: <VolumeX className="h-4 w-4" /> },
-  { id: "rain", name: "Rain", icon: <CloudRain className="h-4 w-4" /> },
-  { id: "cafe", name: "Cafe", icon: <Coffee className="h-4 w-4" /> },
-  { id: "lofi", name: "Lo-Fi", icon: <Music className="h-4 w-4" /> },
-  { id: "whitenoise", name: "White Noise", icon: <Wind className="h-4 w-4" /> },
-  { id: "nature", name: "Nature", icon: <Trees className="h-4 w-4" /> },
-];
+import {
+  getFocusSoundPlayer,
+  SOUND_OPTIONS,
+  type SoundType
+} from "@/lib/audio/focus-sounds";
 
 interface FocusSoundsProps {
-  defaultSound?: FocusSoundType;
+  defaultSound?: SoundType;
   defaultVolume?: number;
   isPlaying?: boolean;
 }
@@ -43,160 +28,45 @@ export function FocusSounds({
   defaultVolume = 50,
   isPlaying = false
 }: FocusSoundsProps) {
-  const [sound, setSound] = useState<FocusSoundType>(defaultSound);
+  const [sound, setSound] = useState<SoundType>(defaultSound);
   const [volume, setVolume] = useState(defaultVolume);
   const [isMuted, setIsMuted] = useState(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const noiseNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const gainNodeRef = useRef<GainNode | null>(null);
 
-  // Create noise generator
-  const createNoiseBuffer = (type: FocusSoundType): AudioBuffer | null => {
-    if (!audioContextRef.current) return null;
-
-    const ctx = audioContextRef.current;
-    const bufferSize = ctx.sampleRate * 2; // 2 seconds of audio
-    const buffer = ctx.createBuffer(2, bufferSize, ctx.sampleRate);
-
-    for (let channel = 0; channel < 2; channel++) {
-      const data = buffer.getChannelData(channel);
-
-      switch (type) {
-        case "whitenoise":
-          // Pure white noise
-          for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
-          }
-          break;
-        case "rain":
-          // Brown noise (rain-like) - accumulated white noise
-          let lastOut = 0;
-          for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            data[i] = (lastOut + 0.02 * white) / 1.02;
-            lastOut = data[i];
-            data[i] *= 3.5; // Boost volume
-          }
-          break;
-        case "nature":
-          // Pink noise (nature-like)
-          let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
-          for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            b0 = 0.99886 * b0 + white * 0.0555179;
-            b1 = 0.99332 * b1 + white * 0.0750759;
-            b2 = 0.96900 * b2 + white * 0.1538520;
-            b3 = 0.86650 * b3 + white * 0.3104856;
-            b4 = 0.55000 * b4 + white * 0.5329522;
-            b5 = -0.7616 * b5 - white * 0.0168980;
-            data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
-            b6 = white * 0.115926;
-          }
-          break;
-        case "cafe":
-          // Filtered noise with occasional variations
-          let lastCafe = 0;
-          for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            // Low-pass filter for murmur effect
-            data[i] = lastCafe * 0.95 + white * 0.05;
-            lastCafe = data[i];
-            // Add occasional "clinks" and variations
-            if (Math.random() < 0.0001) {
-              data[i] += (Math.random() - 0.5) * 0.3;
-            }
-          }
-          break;
-        case "lofi":
-          // Filtered warm noise
-          let lastLofi = 0;
-          for (let i = 0; i < bufferSize; i++) {
-            const white = Math.random() * 2 - 1;
-            // Heavier low-pass for warmth
-            data[i] = lastLofi * 0.97 + white * 0.03;
-            lastLofi = data[i];
-            // Add subtle vinyl crackle
-            if (Math.random() < 0.001) {
-              data[i] += (Math.random() - 0.5) * 0.1;
-            }
-          }
-          break;
-        default:
-          return null;
-      }
-    }
-
-    return buffer;
-  };
-
-  const startSound = () => {
-    if (sound === "none") return;
-
-    stopSound();
-
-    try {
-      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const ctx = audioContextRef.current;
-
-      const buffer = createNoiseBuffer(sound);
-      if (!buffer) return;
-
-      noiseNodeRef.current = ctx.createBufferSource();
-      noiseNodeRef.current.buffer = buffer;
-      noiseNodeRef.current.loop = true;
-
-      gainNodeRef.current = ctx.createGain();
-      gainNodeRef.current.gain.value = isMuted ? 0 : volume / 100;
-
-      noiseNodeRef.current.connect(gainNodeRef.current);
-      gainNodeRef.current.connect(ctx.destination);
-
-      noiseNodeRef.current.start();
-    } catch (e) {
-      console.error("Failed to start focus sound:", e);
-    }
-  };
-
-  const stopSound = () => {
-    try {
-      noiseNodeRef.current?.stop();
-      noiseNodeRef.current?.disconnect();
-      audioContextRef.current?.close();
-    } catch (e) {
-      // Ignore errors during cleanup
-    }
-    noiseNodeRef.current = null;
-    audioContextRef.current = null;
-    gainNodeRef.current = null;
-  };
-
-  // Start/stop based on isPlaying
+  // Control playback based on isPlaying and sound selection
   useEffect(() => {
-    if (isPlaying && sound !== "none") {
-      startSound();
+    const player = getFocusSoundPlayer();
+
+    if (isPlaying && sound !== "none" && !isMuted) {
+      player.play(sound, volume / 100);
     } else {
-      stopSound();
+      player.stop();
     }
 
-    return () => stopSound();
-  }, [isPlaying, sound]);
+    return () => {
+      player.stop();
+    };
+  }, [isPlaying, sound, isMuted]);
 
-  // Update volume
+  // Update volume in real-time
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = isMuted ? 0 : volume / 100;
+    const player = getFocusSoundPlayer();
+    if (isMuted) {
+      player.setVolume(0);
+    } else {
+      player.setVolume(volume / 100);
     }
   }, [volume, isMuted]);
 
-  const handleSoundChange = async (newSound: FocusSoundType) => {
+  const handleSoundChange = async (newSound: SoundType) => {
+    const player = getFocusSoundPlayer();
+
     setSound(newSound);
     await updateFocusSoundPreference(newSound, volume);
 
-    if (isPlaying) {
-      stopSound();
-      if (newSound !== "none") {
-        setTimeout(startSound, 100);
-      }
+    if (isPlaying && newSound !== "none" && !isMuted) {
+      player.play(newSound, volume / 100);
+    } else {
+      player.stop();
     }
   };
 
@@ -205,7 +75,7 @@ export function FocusSounds({
     await updateFocusSoundPreference(sound, newVolume[0]);
   };
 
-  const currentSound = SOUND_OPTIONS.find(s => s.id === sound);
+  const currentSound = SOUND_OPTIONS.find(s => s.value === sound);
 
   return (
     <Popover>
@@ -224,25 +94,25 @@ export function FocusSounds({
             <Volume2 className="h-4 w-4" />
           )}
           <span className="hidden sm:inline">
-            {currentSound?.name || "Sounds"}
+            {currentSound?.label || "Sounds"}
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64" align="end">
+      <PopoverContent className="w-72" align="end">
         <div className="space-y-4">
           <div className="font-medium text-sm">Focus Sounds</div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {SOUND_OPTIONS.map((option) => (
               <Button
-                key={option.id}
-                variant={sound === option.id ? "default" : "outline"}
+                key={option.value}
+                variant={sound === option.value ? "default" : "outline"}
                 size="sm"
                 className="flex-col h-auto py-2 gap-1"
-                onClick={() => handleSoundChange(option.id)}
+                onClick={() => handleSoundChange(option.value)}
               >
-                {option.icon}
-                <span className="text-xs">{option.name}</span>
+                <span className="text-lg">{option.icon}</span>
+                <span className="text-xs">{option.label}</span>
               </Button>
             ))}
           </div>
@@ -275,10 +145,13 @@ export function FocusSounds({
           )}
 
           <p className="text-xs text-muted-foreground">
-            Ambient sounds play during focus sessions
+            Procedurally generated ambient sounds - no downloads needed
           </p>
         </div>
       </PopoverContent>
     </Popover>
   );
 }
+
+// Re-export types for convenience
+export type { SoundType };
