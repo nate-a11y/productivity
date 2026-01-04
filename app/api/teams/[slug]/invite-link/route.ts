@@ -46,12 +46,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 
-    // Create invitation (use .invalid TLD for link invites - RFC 2606 reserved)
+    // Create invitation (link invites use placeholder email on our domain)
     const { error: inviteError } = await supabase
       .from("zeroed_team_invitations")
       .insert({
         team_id: team.id,
-        email: `link-${token.slice(0, 8)}@invite.invalid`,
+        email: `link-${token.slice(0, 8)}@invite.getbruh.app`,
         role: role || "member",
         invited_by: user.id,
         token,
