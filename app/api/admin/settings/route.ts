@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isAdmin } from "@/lib/admin";
+import { clearPlatformSettingsCache } from "@/lib/platform-settings";
 
 // Platform settings are stored in zeroed_platform_settings table
 // This is a simple key-value store for admin settings
@@ -62,6 +63,9 @@ export async function PUT(request: NextRequest) {
     console.error("Failed to update setting:", error);
     return NextResponse.json({ error: "Failed to update setting" }, { status: 500 });
   }
+
+  // Clear the settings cache so changes take effect immediately
+  clearPlatformSettingsCache();
 
   return NextResponse.json({ success: true, key, value });
 }
