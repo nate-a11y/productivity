@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -106,6 +108,10 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showActivityDialog, setShowActivityDialog] = useState(false);
+  const [showEmailDialog, setShowEmailDialog] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailMessage, setEmailMessage] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Fetch users when Users tab is active
@@ -178,7 +184,42 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
   }
 
   function handleSendEmail(user: AdminUser) {
-    window.location.href = `mailto:${user.email}`;
+    setSelectedUser(user);
+    setEmailSubject("");
+    setEmailMessage("");
+    setShowEmailDialog(true);
+  }
+
+  async function sendEmailToUser() {
+    if (!selectedUser || !emailSubject.trim() || !emailMessage.trim()) return;
+
+    setSendingEmail(true);
+    try {
+      const res = await fetch("/api/admin/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selectedUser.email,
+          subject: emailSubject,
+          message: emailMessage,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`Email sent to ${selectedUser.email}`);
+        setShowEmailDialog(false);
+        setEmailSubject("");
+        setEmailMessage("");
+        setSelectedUser(null);
+      } else {
+        toast.error(data.error || "Failed to send email");
+      }
+    } catch {
+      toast.error("Failed to send email");
+    } finally {
+      setSendingEmail(false);
+    }
   }
 
   function handleViewActivity(user: AdminUser) {
@@ -599,6 +640,64 @@ export function AdminDashboard({ stats, recentUsers }: AdminDashboardProps) {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Compose Dialog */}
+      <Dialog open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Send Email</DialogTitle>
+            <DialogDescription>
+              Send an email to {selectedUser?.display_name || selectedUser?.email}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>To</Label>
+              <Input value={selectedUser?.email || ""} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="subject">Subject</Label>
+              <Input
+                id="subject"
+                placeholder="Email subject..."
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="message">Message</Label>
+              <Textarea
+                id="message"
+                placeholder="Write your message..."
+                rows={6}
+                value={emailMessage}
+                onChange={(e) => setEmailMessage(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowEmailDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={sendEmailToUser}
+              disabled={sendingEmail || !emailSubject.trim() || !emailMessage.trim()}
+            >
+              {sendingEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Email
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
