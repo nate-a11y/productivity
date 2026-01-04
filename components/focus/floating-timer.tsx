@@ -11,31 +11,36 @@ import {
   ChevronDown,
   Maximize2,
   GripHorizontal,
-  ExternalLink,
+  PictureInPicture2,
   X
 } from "lucide-react";
 import { cn, formatTimerDisplay } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTimerStore } from "@/lib/hooks/use-timer";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 interface FloatingTimerProps {
   onClose?: () => void;
+  autoOpenPiP?: boolean;
 }
 
 // Check if Document Picture-in-Picture is supported
-const isPiPSupported = typeof window !== "undefined" && "documentPictureInPicture" in window;
+function isPiPSupported(): boolean {
+  if (typeof window === "undefined") return false;
+  return "documentPictureInPicture" in window;
+}
 
-export function FloatingTimer({ onClose }: FloatingTimerProps) {
-  const router = useRouter();
+export function FloatingTimer({ onClose, autoOpenPiP = false }: FloatingTimerProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [position, setPosition] = useState({ x: 20, y: 20 });
   const [isDragging, setIsDragging] = useState(false);
   const [pipWindow, setPipWindow] = useState<Window | null>(null);
   const [pipContainer, setPipContainer] = useState<HTMLElement | null>(null);
+  const [pipSupported, setPipSupported] = useState(false);
+  const [pipError, setPipError] = useState<string | null>(null);
   const dragRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0, posX: 0, posY: 0 });
+  const hasTriedAutoPiP = useRef(false);
 
   const {
     state,
@@ -48,61 +53,192 @@ export function FloatingTimer({ onClose }: FloatingTimerProps) {
     stopTimer,
   } = useTimerStore();
 
+  // Check PiP support on mount
+  useEffect(() => {
+    setPipSupported(isPiPSupported());
+  }, []);
+
   // Open Picture-in-Picture window
   const openPiP = useCallback(async () => {
-    if (!isPiPSupported) return;
+    if (!isPiPSupported()) {
+      setPipError("Your browser doesn't support Picture-in-Picture");
+      return false;
+    }
 
     try {
-      // @ts-expect-error - Document PiP API types not yet in TS
-      const pip = await window.documentPictureInPicture.requestWindow({
-        width: 300,
-        height: 200,
-      });
-
-      // Copy styles to PiP window
-      const styleSheets = document.styleSheets;
-      for (const sheet of styleSheets) {
-        try {
-          const cssRules = [...sheet.cssRules].map(rule => rule.cssText).join("\n");
-          const style = pip.document.createElement("style");
-          style.textContent = cssRules;
-          pip.document.head.appendChild(style);
-        } catch {
-          // Skip cross-origin stylesheets
-          if (sheet.href) {
-            const link = pip.document.createElement("link");
-            link.rel = "stylesheet";
-            link.href = sheet.href;
-            pip.document.head.appendChild(link);
-          }
-        }
+      // Close existing PiP window if any
+      if (pipWindow) {
+        pipWindow.close();
       }
 
-      // Set dark background
-      pip.document.body.style.backgroundColor = "#0a0a0a";
-      pip.document.body.style.margin = "0";
-      pip.document.body.style.padding = "12px";
-      pip.document.body.style.fontFamily = "system-ui, sans-serif";
+      // @ts-expect-error - Document PiP API types not yet in TS
+      const pip: Window = await window.documentPictureInPicture.requestWindow({
+        width: 320,
+        height: 220,
+        disallowReturnToOpener: false,
+      });
 
-      // Create container for React portal
+      // Set up the PiP document
+      pip.document.documentElement.style.colorScheme = "dark";
+
+      // Add basic styles directly
+      const style = pip.document.createElement("style");
+      style.textContent = `
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: system-ui, -apple-system, sans-serif;
+          background: #0a0a0a;
+          color: white;
+          padding: 16px;
+          height: 100vh;
+          display: flex;
+          flex-direction: column;
+        }
+        .progress-bar {
+          height: 4px;
+          background: #27272a;
+          border-radius: 2px;
+          overflow: hidden;
+          margin-bottom: 16px;
+        }
+        .progress-fill {
+          height: 100%;
+          transition: width 0.5s ease;
+        }
+        .progress-fill.focus { background: #f97316; }
+        .progress-fill.break { background: #22c55e; }
+        .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        }
+        .badge {
+          font-size: 11px;
+          font-weight: 500;
+          padding: 2px 8px;
+          border-radius: 9999px;
+        }
+        .badge.focus { background: rgba(249,115,22,0.2); color: #fb923c; }
+        .badge.break { background: rgba(34,197,94,0.2); color: #4ade80; }
+        .close-btn {
+          background: none;
+          border: none;
+          color: #71717a;
+          cursor: pointer;
+          padding: 4px;
+          font-size: 14px;
+        }
+        .close-btn:hover { color: white; }
+        .timer {
+          text-align: center;
+          font-family: ui-monospace, monospace;
+          font-size: 48px;
+          font-weight: 700;
+          letter-spacing: -2px;
+          margin: 8px 0;
+        }
+        .timer.running { color: #f97316; }
+        .timer.paused { color: #71717a; }
+        .task-name {
+          text-align: center;
+          font-size: 12px;
+          color: #a1a1aa;
+          margin-bottom: 12px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .controls {
+          display: flex;
+          justify-content: center;
+          gap: 8px;
+          margin-top: auto;
+        }
+        .btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          transition: all 0.15s;
+        }
+        .btn-icon {
+          width: 36px;
+          height: 36px;
+          background: transparent;
+          border: 1px solid #3f3f46;
+          color: #a1a1aa;
+        }
+        .btn-icon:hover { background: #27272a; color: white; }
+        .btn-primary {
+          height: 36px;
+          padding: 0 16px;
+          background: #f97316;
+          color: white;
+        }
+        .btn-primary:hover { background: #ea580c; }
+        .btn-primary.paused { background: #22c55e; }
+        .btn-primary.paused:hover { background: #16a34a; }
+        svg {
+          width: 16px;
+          height: 16px;
+        }
+      `;
+      pip.document.head.appendChild(style);
+
+      // Create container for content
       const container = pip.document.createElement("div");
+      container.id = "pip-root";
       pip.document.body.appendChild(container);
 
       setPipWindow(pip);
       setPipContainer(container);
+      setPipError(null);
 
       // Handle PiP window close
       pip.addEventListener("pagehide", () => {
         setPipWindow(null);
         setPipContainer(null);
       });
+
+      return true;
     } catch (error) {
       console.error("Failed to open PiP:", error);
+      setPipError(error instanceof Error ? error.message : "Failed to open Picture-in-Picture");
+      return false;
     }
-  }, []);
+  }, [pipWindow]);
 
   // Only show when timer is active
   const isActive = state === "running" || state === "paused" || state === "break";
+
+  // Auto-open PiP when timer becomes active (only once per session)
+  useEffect(() => {
+    if (autoOpenPiP && isActive && !pipWindow && !hasTriedAutoPiP.current && pipSupported) {
+      hasTriedAutoPiP.current = true;
+      // Small delay to ensure user gesture context is available
+      const timer = setTimeout(() => {
+        openPiP();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [autoOpenPiP, isActive, pipWindow, pipSupported, openPiP]);
+
+  // Reset auto-PiP flag when timer stops
+  useEffect(() => {
+    if (!isActive) {
+      hasTriedAutoPiP.current = false;
+    }
+  }, [isActive]);
 
   // Close PiP when timer stops
   useEffect(() => {
@@ -158,10 +294,27 @@ export function FloatingTimer({ onClose }: FloatingTimerProps) {
   // Calculate progress
   const progress = initialTime > 0 ? ((initialTime - timeRemaining) / initialTime) * 100 : 0;
 
+  // Don't render in-browser widget if PiP is open
+  if (pipWindow && pipContainer) {
+    return createPortal(
+      <PiPTimerContent
+        state={state}
+        sessionType={sessionType}
+        timeRemaining={timeRemaining}
+        initialTime={initialTime}
+        task={task}
+        pauseTimer={pauseTimer}
+        resumeTimer={resumeTimer}
+        stopTimer={stopTimer}
+        onClose={() => pipWindow.close()}
+      />,
+      pipContainer
+    );
+  }
+
   if (!isActive) return null;
 
   return (
-    <>
     <AnimatePresence>
       <motion.div
         ref={dragRef}
@@ -249,15 +402,15 @@ export function FloatingTimer({ onClose }: FloatingTimerProps) {
                   >
                     <ChevronDown className="h-3 w-3" />
                   </Button>
-                  {isPiPSupported && (
+                  {pipSupported && (
                     <Button
                       size="icon"
                       variant="ghost"
                       className="h-6 w-6"
                       onClick={openPiP}
-                      title="Pop out (stays on top)"
+                      title="Pop out window (stays on top of other apps)"
                     >
-                      <ExternalLink className="h-3 w-3" />
+                      <PictureInPicture2 className="h-3 w-3" />
                     </Button>
                   )}
                   <Link href="/focus">
@@ -267,6 +420,11 @@ export function FloatingTimer({ onClose }: FloatingTimerProps) {
                   </Link>
                 </div>
               </div>
+
+              {/* PiP Error */}
+              {pipError && (
+                <p className="text-xs text-red-400 text-center">{pipError}</p>
+              )}
 
               {/* Timer display */}
               <div className="text-center">
@@ -315,27 +473,10 @@ export function FloatingTimer({ onClose }: FloatingTimerProps) {
         </div>
       </motion.div>
     </AnimatePresence>
-
-    {/* Picture-in-Picture content */}
-    {pipContainer && createPortal(
-      <PiPTimerContent
-        state={state}
-        sessionType={sessionType}
-        timeRemaining={timeRemaining}
-        initialTime={initialTime}
-        task={task}
-        pauseTimer={pauseTimer}
-        resumeTimer={resumeTimer}
-        stopTimer={stopTimer}
-        onClose={() => pipWindow?.close()}
-      />,
-      pipContainer
-    )}
-  </>
   );
 }
 
-// Simplified timer content for PiP window
+// Simplified timer content for PiP window (vanilla HTML/JS - no React)
 function PiPTimerContent({
   state,
   sessionType,
@@ -358,84 +499,68 @@ function PiPTimerContent({
   onClose: () => void;
 }) {
   const progress = initialTime > 0 ? ((initialTime - timeRemaining) / initialTime) * 100 : 0;
+  const isFocus = sessionType === "focus";
+  const isPaused = state === "paused";
+
+  // SVG icons as strings
+  const playIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+  const pauseIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+  const stopIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>`;
 
   return (
-    <div className="text-white">
-      {/* Progress bar */}
-      <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden mb-4">
-        <div
-          className={cn(
-            "h-full transition-all duration-500",
-            sessionType === "focus" ? "bg-orange-500" : "bg-green-500"
-          )}
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+    <div
+      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      dangerouslySetInnerHTML={{
+        __html: `
+          <div class="progress-bar">
+            <div class="progress-fill ${isFocus ? 'focus' : 'break'}" style="width: ${progress}%"></div>
+          </div>
 
-      {/* Session type */}
-      <div className="flex items-center justify-between mb-2">
-        <span className={cn(
-          "text-xs font-medium px-2 py-0.5 rounded-full",
-          sessionType === "focus"
-            ? "bg-orange-500/20 text-orange-400"
-            : "bg-green-500/20 text-green-400"
-        )}>
-          {sessionType === "focus" ? "Focus" : sessionType === "short_break" ? "Break" : "Long Break"}
-        </span>
-        <button
-          onClick={onClose}
-          className="text-zinc-500 hover:text-white text-xs"
-        >
-          ✕
-        </button>
-      </div>
+          <div class="header">
+            <span class="badge ${isFocus ? 'focus' : 'break'}">
+              ${isFocus ? 'Focus' : sessionType === 'short_break' ? 'Break' : 'Long Break'}
+            </span>
+            <button class="close-btn" onclick="window.close()">✕</button>
+          </div>
 
-      {/* Timer */}
-      <div className="text-center mb-3">
-        <span
-          className={cn(
-            "font-mono text-4xl font-bold tabular-nums",
-            state === "running" && "text-orange-500",
-            state === "paused" && "text-zinc-400"
-          )}
-        >
-          {formatTimerDisplay(timeRemaining)}
-        </span>
-      </div>
+          <div class="timer ${state === 'running' ? 'running' : 'paused'}">
+            ${formatTimerDisplay(timeRemaining)}
+          </div>
 
-      {/* Task name */}
-      {task && (
-        <p className="text-xs text-zinc-400 text-center truncate mb-3">
-          {task.title}
-        </p>
-      )}
+          ${task ? `<div class="task-name">${task.title}</div>` : ''}
 
-      {/* Controls */}
-      <div className="flex items-center justify-center gap-2">
-        <button
-          onClick={stopTimer}
-          className="h-8 w-8 rounded-lg border border-zinc-700 hover:bg-zinc-800 flex items-center justify-center"
-        >
-          <Square className="h-3.5 w-3.5 text-zinc-400" />
-        </button>
-        {state === "paused" ? (
-          <button
-            onClick={resumeTimer}
-            className="h-8 px-4 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium flex items-center gap-1.5"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Resume
-          </button>
-        ) : (
-          <button
-            onClick={pauseTimer}
-            className="h-8 px-4 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium flex items-center gap-1.5"
-          >
-            <Pause className="h-3.5 w-3.5" />
-            Pause
-          </button>
-        )}
-      </div>
-    </div>
+          <div class="controls">
+            <button class="btn btn-icon" id="stop-btn">${stopIcon}</button>
+            <button class="btn btn-primary ${isPaused ? 'paused' : ''}" id="toggle-btn">
+              ${isPaused ? playIcon : pauseIcon}
+              ${isPaused ? 'Resume' : 'Pause'}
+            </button>
+          </div>
+        `
+      }}
+      ref={(el) => {
+        if (el) {
+          const stopBtn = el.querySelector('#stop-btn');
+          const toggleBtn = el.querySelector('#toggle-btn');
+
+          if (stopBtn) {
+            stopBtn.addEventListener('click', () => {
+              stopTimer();
+              onClose();
+            });
+          }
+
+          if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+              if (isPaused) {
+                resumeTimer();
+              } else {
+                pauseTimer();
+              }
+            });
+          }
+        }
+      }}
+    />
   );
 }
